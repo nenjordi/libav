@@ -142,7 +142,7 @@ static enum PixelFormat frame_pix_fmt = PIX_FMT_NONE;
 static enum AVSampleFormat audio_sample_fmt = AV_SAMPLE_FMT_NONE;
 static int max_frames[4] = {INT_MAX, INT_MAX, INT_MAX, INT_MAX};
 static AVRational frame_rate;
-static float video_qscale = 0;
+static float video_qscale = -1;
 static uint16_t *intra_matrix = NULL;
 static uint16_t *inter_matrix = NULL;
 static const char *video_rc_override_string=NULL;
@@ -3483,7 +3483,7 @@ static void new_video_stream(AVFormatContext *oc, int file_idx)
 
         if (intra_only)
             video_enc->gop_size = 0;
-        if (video_qscale || same_quality) {
+        if (video_qscale >= 0 || same_quality) {
             video_enc->flags |= CODEC_FLAG_QSCALE;
             video_enc->global_quality=
                 st->quality = FF_QP2LAMBDA * video_qscale;

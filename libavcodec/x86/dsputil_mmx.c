@@ -31,6 +31,7 @@
 #include "libavcodec/ac3dec.h"
 #include "dsputil_mmx.h"
 #include "idct_xvid.h"
+#include "diracdsp_mmx.h"
 
 //#undef NDEBUG
 //#include <assert.h>
@@ -407,7 +408,7 @@ static void put_pixels8_mmx(uint8_t *block, const uint8_t *pixels, int line_size
          "add %%"REG_a", %1             \n\t"
          "add %%"REG_a", %2             \n\t"
          "subl $4, %0                   \n\t"
-         "jnz 1b                        \n\t"
+         "jg 1b                         \n\t"
          : "+g"(h), "+r" (pixels),  "+r" (block)
          : "r"((x86_reg)line_size)
          : "%"REG_a, "memory"
@@ -441,7 +442,7 @@ static void put_pixels16_mmx(uint8_t *block, const uint8_t *pixels, int line_siz
          "add %%"REG_a", %1             \n\t"
          "add %%"REG_a", %2             \n\t"
          "subl $4, %0                   \n\t"
-         "jnz 1b                        \n\t"
+         "jg 1b                        \n\t"
          : "+g"(h), "+r" (pixels),  "+r" (block)
          : "r"((x86_reg)line_size)
          : "%"REG_a, "memory"
@@ -463,7 +464,7 @@ static void put_pixels16_sse2(uint8_t *block, const uint8_t *pixels, int line_si
          "subl $4, %0                   \n\t"
          "lea (%1,%3,4), %1             \n\t"
          "lea (%2,%3,4), %2             \n\t"
-         "jnz 1b                        \n\t"
+         "jg 1b                        \n\t"
          : "+g"(h), "+r" (pixels),  "+r" (block)
          : "r"((x86_reg)line_size), "r"((x86_reg)3L*line_size)
          : "memory"
@@ -489,7 +490,7 @@ static void avg_pixels16_sse2(uint8_t *block, const uint8_t *pixels, int line_si
          "subl $4, %0                   \n\t"
          "lea (%1,%3,4), %1             \n\t"
          "lea (%2,%3,4), %2             \n\t"
-         "jnz 1b                        \n\t"
+         "jg 1b                        \n\t"
          : "+g"(h), "+r" (pixels),  "+r" (block)
          : "r"((x86_reg)line_size), "r"((x86_reg)3L*line_size)
          : "memory"
@@ -1960,6 +1961,46 @@ void ff_put_vc1_mspel_mc00_mmx(uint8_t *dst, const uint8_t *src, int stride, int
 void ff_avg_vc1_mspel_mc00_mmx2(uint8_t *dst, const uint8_t *src, int stride, int rnd) {
     avg_pixels8_mmx2(dst, src, stride, 8);
 }
+
+#if CONFIG_DIRAC_DECODER
+#define DIRAC_PIXOP(OPNAME, EXT)\
+void ff_ ## OPNAME ## _dirac_pixels8_ ## EXT(uint8_t *dst, const uint8_t *src[5], int stride, int h)\
+{\
+    OPNAME ## _pixels8_ ## EXT(dst, src[0], stride, h);\
+}\
+void ff_ ## OPNAME ## _dirac_pixels16_ ## EXT(uint8_t *dst, const uint8_t *src[5], int stride, int h)\
+{\
+    OPNAME ## _pixels16_ ## EXT(dst, src[0], stride, h);\
+}\
+void ff_ ## OPNAME ## _dirac_pixels32_ ## EXT(uint8_t *dst, const uint8_t *src[5], int stride, int h)\
+{\
+    OPNAME ## _pixels16_ ## EXT(dst   , src[0]   , stride, h);\
+    OPNAME ## _pixels16_ ## EXT(dst+16, src[0]+16, stride, h);\
+}
+
+DIRAC_PIXOP(put, mmx)
+DIRAC_PIXOP(avg, mmx)
+DIRAC_PIXOP(avg, mmx2)
+
+void ff_put_dirac_pixels16_sse2(uint8_t *dst, const uint8_t *src[5], int stride, int h)
+{
+    put_pixels16_sse2(dst, src[0], stride, h);
+}
+void ff_avg_dirac_pixels16_sse2(uint8_t *dst, const uint8_t *src[5], int stride, int h)
+{
+    avg_pixels16_sse2(dst, src[0], stride, h);
+}
+void ff_put_dirac_pixels32_sse2(uint8_t *dst, const uint8_t *src[5], int stride, int h)
+{
+    put_pixels16_sse2(dst   , src[0]   , stride, h);
+    put_pixels16_sse2(dst+16, src[0]+16, stride, h);
+}
+void ff_avg_dirac_pixels32_sse2(uint8_t *dst, const uint8_t *src[5], int stride, int h)
+{
+    avg_pixels16_sse2(dst   , src[0]   , stride, h);
+    avg_pixels16_sse2(dst+16, src[0]+16, stride, h);
+}
+#endif
 
 /* XXX: those functions should be suppressed ASAP when all IDCTs are
    converted */
