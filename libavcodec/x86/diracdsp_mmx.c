@@ -58,7 +58,7 @@ HPEL_FILTER(16, sse2)
 
 void ff_diracdsp_init_mmx(DiracDSPContext* c)
 {
-    mm_flags = mm_support();
+  int mm_flags = av_get_cpu_flags();;
 
 #if HAVE_YASM
     c->add_dirac_obmc[0] = ff_add_dirac_obmc8_mmx;
@@ -74,11 +74,11 @@ void ff_diracdsp_init_mmx(DiracDSPContext* c)
     PIXFUNC(put, 0, mmx);
     PIXFUNC(avg, 0, mmx);
 
-    if (mm_flags & FF_MM_MMX2) {
+    if (mm_flags & AV_CPU_FLAG_MMX2) {
         PIXFUNC(avg, 0, mmx2);
     }
 
-    if (mm_flags & FF_MM_SSE2) {
+    if (mm_flags & AV_CPU_FLAG_SSE2) {
 #if HAVE_YASM
         c->dirac_hpel_filter = dirac_hpel_filter_sse2;
         c->add_rect_clamped = ff_add_rect_clamped_sse2;

@@ -1442,7 +1442,7 @@ static void interpolate_refplane(DiracContext *s, DiracFrame *ref, int plane, in
     int i, edge = EDGE_WIDTH/2;
 
     ref->hpel[plane][0] = ref->data[plane];
-    s->dsp.draw_edges(ref->hpel[plane][0], ref->linesize[plane], width, height, edge);
+    s->dsp.draw_edges(ref->hpel[plane][0], ref->linesize[plane], width, height, edge, EDGE_TOP | EDGE_BOTTOM); //EDGE_TOP | EDGE_BOTTOM values just copied to make it build, this needs to be ensured
 
     // no need for hpel if we only have fpel vectors
     if (!s->mv_precision)
@@ -1459,9 +1459,9 @@ static void interpolate_refplane(DiracContext *s, DiracFrame *ref, int plane, in
         s->diracdsp.dirac_hpel_filter(ref->hpel[plane][1], ref->hpel[plane][2],
                                       ref->hpel[plane][3], ref->hpel[plane][0],
                                       ref->linesize[plane], width, height);
-        s->dsp.draw_edges(ref->hpel[plane][1], ref->linesize[plane], width, height, edge);
-        s->dsp.draw_edges(ref->hpel[plane][2], ref->linesize[plane], width, height, edge);
-        s->dsp.draw_edges(ref->hpel[plane][3], ref->linesize[plane], width, height, edge);
+        s->dsp.draw_edges(ref->hpel[plane][1], ref->linesize[plane], width, height, edge, EDGE_TOP | EDGE_BOTTOM);
+        s->dsp.draw_edges(ref->hpel[plane][2], ref->linesize[plane], width, height, edge, EDGE_TOP | EDGE_BOTTOM);
+        s->dsp.draw_edges(ref->hpel[plane][3], ref->linesize[plane], width, height, edge, EDGE_TOP | EDGE_BOTTOM);
     }
     ref->interpolated[plane] = 1;
 }
@@ -1801,9 +1801,9 @@ static int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     return buf_idx;
 }
 
-AVCodec dirac_decoder = {
+AVCodec ff_dirac_decoder = {
     "dirac",
-    CODEC_TYPE_VIDEO,
+    AVMEDIA_TYPE_VIDEO,  //CODEC_TYPE_VIDEO --> AVMEDIA_TYPE_VIDEO
     CODEC_ID_DIRAC,
     sizeof(DiracContext),
     dirac_decode_init,

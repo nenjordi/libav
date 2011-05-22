@@ -127,10 +127,10 @@ void ff_horizontal_compose_haar1i_end_c(IDWTELEM *b, IDWTELEM *tmp, int w2, int 
 void ff_spatial_idwt_init_mmx(DWTContext *d, enum dwt_type type)
 {
 #if HAVE_YASM
-    mm_flags = mm_support();
+  int mm_flags = av_get_cpu_flags();;
 
 #if !ARCH_X86_64
-    if (!(mm_flags & FF_MM_MMX))
+    if (!(mm_flags & AV_CPU_FLAG_MMX))
         return;
 
     switch (type) {
@@ -157,7 +157,7 @@ void ff_spatial_idwt_init_mmx(DWTContext *d, enum dwt_type type)
     }
 #endif
 
-    if (!(mm_flags & FF_MM_SSE2))
+    if (!(mm_flags & AV_CPU_FLAG_SSE2))
         return;
 
     switch (type) {
@@ -183,7 +183,7 @@ void ff_spatial_idwt_init_mmx(DWTContext *d, enum dwt_type type)
         break;
     }
 
-    if (!(mm_flags & FF_MM_SSSE3))
+    if (!(mm_flags & AV_CPU_FLAG_SSSE3))
         return;
 
     switch (type) {
