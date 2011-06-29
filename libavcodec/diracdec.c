@@ -465,6 +465,7 @@ static inline int coeff_unpack_golomb(GetBitContext *gb, int qfactor, int qoffse
 
 /**
  * Decode the coeffs in the rectangle defined by left, right, top, bottom
+ * [DIRAC_STD] 13.4.3.2 Codeblock unpacking loop. codeblock()
  */
 static inline void codeblock(DiracContext *s, SubBand *b,
                              GetBitContext *gb, DiracArith *c,
@@ -505,6 +506,7 @@ static inline void codeblock(DiracContext *s, SubBand *b,
     buf = b->ibuf + top*b->stride;
     for (y = top; y < bottom; y++) {
         for (x = left; x < right; x++) {
+	  //[DIRAC_STD] 13.4.4 Subband coefficients. coeff_unpack()
             if (is_arith)
                 coeff_unpack_arith(c, qfactor, qoffset, b, buf+x, x, y);
             else
@@ -535,6 +537,7 @@ static inline void intra_dc_prediction(SubBand *b)
     }
 }
 
+//[DIRAC_STD] 13.4.2 Non-skipped subbands.  subband_coeffs()
 static av_always_inline
 void decode_subband_internal(DiracContext *s, SubBand *b, int is_arith)
 {
@@ -619,6 +622,7 @@ static void decode_component(DiracContext *s, int comp)
         avctx->execute(avctx, decode_subband_golomb, bands, NULL, num_bands, sizeof(SubBand*));
 }
 
+//[DIRAC_STD] 13.5.5.2 Luma slice subband data. luma_slice_band(level,orient,sx,sy)
 static void lowdelay_subband(DiracContext *s, GetBitContext *gb, int quant,
                              int slice_x, int slice_y, int bits_end,
                              SubBand *b1, SubBand *b2)
@@ -634,7 +638,7 @@ static void lowdelay_subband(DiracContext *s, GetBitContext *gb, int quant,
     IDWTELEM *buf1 =      b1->ibuf + top*b1->stride;
     IDWTELEM *buf2 = b2 ? b2->ibuf + top*b2->stride : NULL;
     int x, y;
-
+    
     // we have to constantly check for overread since the spec explictly
     // requires this, with the meaning that all remaining coeffs are set to 0
     if (get_bits_count(gb) >= bits_end)
@@ -653,7 +657,8 @@ static void lowdelay_subband(DiracContext *s, GetBitContext *gb, int quant,
         }
         buf1 += b1->stride;
         if (buf2)
-            buf2 += b2->stride;
+            buf2 += b2->stride;	 
+	
     }
 }
 
@@ -664,6 +669,8 @@ struct lowdelay_slice {
     int bytes;
 };
 
+
+//[DIRAC_STD] 13.5.2 Slices. slice(sx,sy)
 static int decode_lowdelay_slice(AVCodecContext *avctx, void *arg)
 {
     DiracContext *s = avctx->priv_data;
@@ -672,11 +679,11 @@ static int decode_lowdelay_slice(AVCodecContext *avctx, void *arg)
     enum dirac_subband orientation;
     int level, quant, chroma_bits, chroma_end;
 
-    int quant_base  = get_bits(gb, 7);
+    int quant_base  = get_bits(gb, 7); //[DIRAC_STD] qindex
     int length_bits = av_log2(8*slice->bytes)+1;
     int luma_bits   = get_bits_long(gb, length_bits);
     int luma_end    = get_bits_count(gb) + FFMIN(luma_bits, get_bits_left(gb));
-
+    
     for (level = 0; level < s->wavelet_depth; level++)
         for (orientation = !!level; orientation < 4; orientation++) {
             quant = FFMAX(quant_base - s->lowdelay.quant[level][orientation], 0);
@@ -715,8 +722,12 @@ static void decode_lowdelay(DiracContext *s)
     align_get_bits(&s->gb);
     //[DIRAC_STD] 13.5.2 Slices. slice(sx,sy)
     buf = s->gb.buffer + get_bits_count(&s->gb)/8;
-    bufsize = get_bits_left(&s->gb);
+    bufsize = get_bits_left(&s->gb)/8;
 
+    //qindex? Read nbits(7)? s->quant_base readed before
+    //uint8_t quant_base  = get_bits(&s->gb, 7);
+    
+   
     for (slice_y = 0; slice_y < s->lowdelay.num_y; slice_y++)
         for (slice_x = 0; slice_x < s->lowdelay.num_x; slice_x++) {
             bytes = (slice_num+1) * s->lowdelay.bytes.num / s->lowdelay.bytes.den
@@ -734,9 +745,11 @@ static void decode_lowdelay(DiracContext *s)
                 goto end;
         }
 end:
+
     avctx->execute(avctx, decode_lowdelay_slice, slices, NULL, slice_num,
                    sizeof(struct lowdelay_slice));
 
+    
     intra_dc_prediction(&s->plane[0].band[0][0]); //[DIRAC_STD] 13.3 intra_dc_prediction()
     intra_dc_prediction(&s->plane[1].band[0][0]);
     intra_dc_prediction(&s->plane[2].band[0][0]);
@@ -942,13 +955,15 @@ static int dirac_unpack_idwt_params(DiracContext *s)
         } else
             for (i = 0; i <= s->wavelet_depth; i++)
                 s->codeblock[i].width = s->codeblock[i].height = 1;
-    } else {
+    } else {      
       /* Slice parameters + quantization matrix*/
+      //[DIRAC_STD] 11.3.4 Slice coding Parameters (low delay syntax only). slice_parameters()
         s->lowdelay.num_x     = svq3_get_ue_golomb(gb);
         s->lowdelay.num_y     = svq3_get_ue_golomb(gb);
         s->lowdelay.bytes.num = svq3_get_ue_golomb(gb);
         s->lowdelay.bytes.den = svq3_get_ue_golomb(gb);
 
+	//[DIRAC_STD] 11.3.5 Quantisation matrices (low-delay syntax). quant_matrix()
         if (get_bits1(gb)) {
             // custom quantization matrix
             s->lowdelay.quant[0][0] = svq3_get_ue_golomb(gb);
@@ -1569,6 +1584,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
     return 0;
 }
 
+//[DIRAC_STD] 11.1.1 Picture Header. picture_header()
 static int dirac_decode_picture_header(DiracContext *s)
 {
     int retire, picnum;
