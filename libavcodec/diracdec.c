@@ -47,23 +47,23 @@
  *
  * We use this instead of MAX_DECOMPOSITIONS to save some memory.
  */
-#define MAX_DWT_LEVELS 5
+/* #define MAX_DWT_LEVELS 5 */
 
-/**
- * The spec limits this to 3 for frame coding, but in practice can be as high as 6
- */
-#define MAX_REFERENCE_FRAMES 8
-#define MAX_DELAY 5         ///< limit for main profile for frame coding (TODO: field coding)
-#define MAX_FRAMES (MAX_REFERENCE_FRAMES + MAX_DELAY + 1)
-#define MAX_QUANT 68        ///< max quant for VC-2
-#define MAX_BLOCKSIZE 32    ///< maximum xblen/yblen we support
+/* /\** */
+/*  * The spec limits this to 3 for frame coding, but in practice can be as high as 6 */
+/*  *\/ */
+/* #define MAX_REFERENCE_FRAMES 8 */
+/* #define MAX_DELAY 5         ///< limit for main profile for frame coding (TODO: field coding) */
+/* #define MAX_FRAMES (MAX_REFERENCE_FRAMES + MAX_DELAY + 1) */
+/* #define MAX_QUANT 68        ///< max quant for VC-2 */
+/* #define MAX_BLOCKSIZE 32    ///< maximum xblen/yblen we support */
 
-/**
- * DiracBlock->ref flags, if set then the block does MC from the given ref
- */
-#define DIRAC_REF_MASK_REF1   1
-#define DIRAC_REF_MASK_REF2   2
-#define DIRAC_REF_MASK_GLOBAL 4
+/* /\** */
+/*  * DiracBlock->ref flags, if set then the block does MC from the given ref */
+/*  *\/ */
+/* #define DIRAC_REF_MASK_REF1   1 */
+/* #define DIRAC_REF_MASK_REF2   2 */
+/* #define DIRAC_REF_MASK_GLOBAL 4 */
 
 /**
  * Value of Picture.reference when Picture is not a reference picture, but
@@ -76,203 +76,203 @@
 
 #define DIVRNDUP(a, b) (((a) + (b) - 1) / (b))
 
-typedef struct {
-    FF_COMMON_FRAME
+/* typedef struct { */
+/*     FF_COMMON_FRAME */
 
-    int interpolated[3];    ///< 1 if hpel[] is valid
-    uint8_t *hpel[3][4];
-    uint8_t *hpel_base[3][4];
-} DiracFrame;
+/*     int interpolated[3];    ///< 1 if hpel[] is valid */
+/*     uint8_t *hpel[3][4]; */
+/*     uint8_t *hpel_base[3][4]; */
+/* } DiracFrame; */
 
-typedef struct {
-    union {
-        int16_t mv[2][2];
-        int16_t dc[3];
-    } u; // anonymous unions aren't in C99 :(
-    uint8_t ref;
-} DiracBlock;
+/* typedef struct { */
+/*     union { */
+/*         int16_t mv[2][2]; */
+/*         int16_t dc[3]; */
+/*     } u; // anonymous unions aren't in C99 :( */
+/*     uint8_t ref; */
+/* } DiracBlock; */
 
-typedef struct SubBand {
-    int level;
-    int orientation;
-    int stride;
-    int width;
-    int height;
-    int quant;
-    IDWTELEM *ibuf;
-    struct SubBand *parent;
+/* typedef struct SubBand { */
+/*     int level; */
+/*     int orientation; */
+/*     int stride; */
+/*     int width; */
+/*     int height; */
+/*     int quant; */
+/*     IDWTELEM *ibuf; */
+/*     struct SubBand *parent; */
 
-    // for low delay
-    unsigned length;
-    const uint8_t *coeff_data;
-} SubBand;
+/*     // for low delay */
+/*     unsigned length; */
+/*     const uint8_t *coeff_data; */
+/* } SubBand; */
 
-typedef struct Plane {
-    int width;
-    int height;
-    int stride;
+/* typedef struct Plane { */
+/*     int width; */
+/*     int height; */
+/*     int stride; */
 
-    int idwt_width;
-    int idwt_height;
-    int idwt_stride;
-    IDWTELEM *idwt_buf;
-    IDWTELEM *idwt_buf_base;
-    IDWTELEM *idwt_tmp;
+/*     int idwt_width; */
+/*     int idwt_height; */
+/*     int idwt_stride; */
+/*     IDWTELEM *idwt_buf; */
+/*     IDWTELEM *idwt_buf_base; */
+/*     IDWTELEM *idwt_tmp; */
 
-    // block length
-    uint8_t xblen;
-    uint8_t yblen;
-    // block separation (block n+1 starts after this many pixels in block n)
-    uint8_t xbsep;
-    uint8_t ybsep;
-    // amount of overspill on each edge (half of the overlap between blocks)
-    uint8_t xoffset;
-    uint8_t yoffset;
+/*     // block length */
+/*     uint8_t xblen; */
+/*     uint8_t yblen; */
+/*     // block separation (block n+1 starts after this many pixels in block n) */
+/*     uint8_t xbsep; */
+/*     uint8_t ybsep; */
+/*     // amount of overspill on each edge (half of the overlap between blocks) */
+/*     uint8_t xoffset; */
+/*     uint8_t yoffset; */
 
-    SubBand band[MAX_DWT_LEVELS][4];
-} Plane;
+/*     SubBand band[MAX_DWT_LEVELS][4]; */
+/* } Plane; */
 
-typedef struct DiracContext {
-    AVCodecContext *avctx;
-    DSPContext dsp;
-    DiracDSPContext diracdsp;
-    GetBitContext gb;
-    dirac_source_params source;
-    int seen_sequence_header;
-    int frame_number;           ///< number of the next frame to display
-    Plane plane[3];
-    int chroma_x_shift;
-    int chroma_y_shift;
+/* typedef struct DiracContext { */
+/*     AVCodecContext *avctx; */
+/*     DSPContext dsp; */
+/*     DiracDSPContext diracdsp; */
+/*     GetBitContext gb; */
+/*     dirac_source_params source; */
+/*     int seen_sequence_header; */
+/*     int frame_number;           ///< number of the next frame to display */
+/*     Plane plane[3]; */
+/*     int chroma_x_shift; */
+/*     int chroma_y_shift; */
 
-    int zero_res;               ///< zero residue flag
-    int is_arith;               ///< whether coeffs use arith or golomb coding
-    int low_delay;              ///< use the low delay syntax
-    int globalmc_flag;          ///< use global motion compensation
-    int num_refs;               ///< number of reference pictures
+/*     int zero_res;               ///< zero residue flag */
+/*     int is_arith;               ///< whether coeffs use arith or golomb coding */
+/*     int low_delay;              ///< use the low delay syntax */
+/*     int globalmc_flag;          ///< use global motion compensation */
+/*     int num_refs;               ///< number of reference pictures */
 
-    // wavelet decoding
-    unsigned wavelet_depth;     ///< depth of the IDWT
-    unsigned wavelet_idx;
+/*     // wavelet decoding */
+/*     unsigned wavelet_depth;     ///< depth of the IDWT */
+/*     unsigned wavelet_idx; */
 
-    /**
-     * schroedinger older than 1.0.8 doesn't store
-     * quant delta if only one codebook exists in a band
-     */
-    unsigned old_delta_quant;
-    unsigned codeblock_mode;
+/*     /\** */
+/*      * schroedinger older than 1.0.8 doesn't store */
+/*      * quant delta if only one codebook exists in a band */
+/*      *\/ */
+/*     unsigned old_delta_quant; */
+/*     unsigned codeblock_mode; */
 
-    struct {
-        unsigned width;
-        unsigned height;
-    } codeblock[MAX_DWT_LEVELS+1];
+/*     struct { */
+/*         unsigned width; */
+/*         unsigned height; */
+/*     } codeblock[MAX_DWT_LEVELS+1]; */
 
-    struct {
-        unsigned num_x;         ///< number of horizontal slices
-        unsigned num_y;         ///< number of vertical slices
-        AVRational bytes;       ///< average bytes per slice
-      uint8_t quant[MAX_DWT_LEVELS][4]; //[DIRAC_STD] E.1
-    } lowdelay;
+/*     struct { */
+/*         unsigned num_x;         ///< number of horizontal slices */
+/*         unsigned num_y;         ///< number of vertical slices */
+/*         AVRational bytes;       ///< average bytes per slice */
+/*       uint8_t quant[MAX_DWT_LEVELS][4]; //[DIRAC_STD] E.1 */
+/*     } lowdelay; */
 
-    struct {
-        int pan_tilt[2];        ///< pan/tilt vector
-        int zrs[2][2];          ///< zoom/rotate/shear matrix
-        int perspective[2];     ///< perspective vector
-        unsigned zrs_exp;
-        unsigned perspective_exp;
-    } globalmc[2];
+/*     struct { */
+/*         int pan_tilt[2];        ///< pan/tilt vector */
+/*         int zrs[2][2];          ///< zoom/rotate/shear matrix */
+/*         int perspective[2];     ///< perspective vector */
+/*         unsigned zrs_exp; */
+/*         unsigned perspective_exp; */
+/*     } globalmc[2]; */
 
-    // motion compensation
-  uint8_t mv_precision; //[DIRAC_STD] REFS_WT_PRECISION
-  int16_t weight[2]; ////[DIRAC_STD] REF1_WT and REF2_WT
-  unsigned weight_log2denom; ////[DIRAC_STD] REFS_WT_PRECISION
+/*     // motion compensation */
+/*   uint8_t mv_precision; //[DIRAC_STD] REFS_WT_PRECISION */
+/*   int16_t weight[2]; ////[DIRAC_STD] REF1_WT and REF2_WT */
+/*   unsigned weight_log2denom; ////[DIRAC_STD] REFS_WT_PRECISION */
 
-    int blwidth;            ///< number of blocks (horizontally)
-    int blheight;           ///< number of blocks (vertically)
-    int sbwidth;            ///< number of superblocks (horizontally)
-    int sbheight;           ///< number of superblocks (vertically)
+/*     int blwidth;            ///< number of blocks (horizontally) */
+/*     int blheight;           ///< number of blocks (vertically) */
+/*     int sbwidth;            ///< number of superblocks (horizontally) */
+/*     int sbheight;           ///< number of superblocks (vertically) */
 
-    uint8_t *sbsplit;
-    DiracBlock *blmotion;
+/*     uint8_t *sbsplit; */
+/*     DiracBlock *blmotion; */
 
-    uint8_t *edge_emu_buffer[4];
-    uint8_t *edge_emu_buffer_base;
+/*     uint8_t *edge_emu_buffer[4]; */
+/*     uint8_t *edge_emu_buffer_base; */
 
-    uint16_t *mctmp;        ///< buffer holding the MC data multipled by OBMC weights
-    uint8_t *mcscratch;
+/*     uint16_t *mctmp;        ///< buffer holding the MC data multipled by OBMC weights */
+/*     uint8_t *mcscratch; */
 
-    DECLARE_ALIGNED(16, uint8_t, obmc_weight)[3][MAX_BLOCKSIZE*MAX_BLOCKSIZE];
+/*     DECLARE_ALIGNED(16, uint8_t, obmc_weight)[3][MAX_BLOCKSIZE*MAX_BLOCKSIZE]; */
 
-    void (*put_pixels_tab[4])(uint8_t *dst, const uint8_t *src[5], int stride, int h);
-    void (*avg_pixels_tab[4])(uint8_t *dst, const uint8_t *src[5], int stride, int h);
-    void (*add_obmc)(uint16_t *dst, const uint8_t *src, int stride, const uint8_t *obmc_weight, int yblen);
-    dirac_weight_func weight_func;
-    dirac_biweight_func biweight_func;
+/*     void (*put_pixels_tab[4])(uint8_t *dst, const uint8_t *src[5], int stride, int h); */
+/*     void (*avg_pixels_tab[4])(uint8_t *dst, const uint8_t *src[5], int stride, int h); */
+/*     void (*add_obmc)(uint16_t *dst, const uint8_t *src, int stride, const uint8_t *obmc_weight, int yblen); */
+/*     dirac_weight_func weight_func; */
+/*     dirac_biweight_func biweight_func; */
 
-    DiracFrame *current_picture;
-    DiracFrame *ref_pics[2];
+/*     DiracFrame *current_picture; */
+/*     DiracFrame *ref_pics[2]; */
 
-    DiracFrame *ref_frames[MAX_REFERENCE_FRAMES+1];
-    DiracFrame *delay_frames[MAX_DELAY+1];
-    DiracFrame all_frames[MAX_FRAMES];
-} DiracContext;
+/*     DiracFrame *ref_frames[MAX_REFERENCE_FRAMES+1]; */
+/*     DiracFrame *delay_frames[MAX_DELAY+1]; */
+/*     DiracFrame all_frames[MAX_FRAMES]; */
+/* } DiracContext; */
 
-// [DIRAC_STD] Parse code values. 9.6.1 Table 9.1
-enum dirac_parse_code {
-    pc_seq_header         = 0x00,
-    pc_eos                = 0x10,
-    pc_aux_data           = 0x20,
-    pc_padding            = 0x30,
-};
+/* // [DIRAC_STD] Parse code values. 9.6.1 Table 9.1 */
+/* enum dirac_parse_code { */
+/*     pc_seq_header         = 0x00, */
+/*     pc_eos                = 0x10, */
+/*     pc_aux_data           = 0x20, */
+/*     pc_padding            = 0x30, */
+/* }; */
 
-enum dirac_subband {
-    subband_ll = 0,
-    subband_hl = 1,
-    subband_lh = 2,
-    subband_hh = 3
-};
+/* enum dirac_subband { */
+/*     subband_ll = 0, */
+/*     subband_hl = 1, */
+/*     subband_lh = 2, */
+/*     subband_hh = 3 */
+/* }; */
 
-static const uint8_t default_qmat[][4][4] = {
-    { { 5,  3,  3,  0}, { 0,  4,  4,  1}, { 0,  5,  5,  2}, { 0,  6,  6,  3} },
-    { { 4,  2,  2,  0}, { 0,  4,  4,  2}, { 0,  5,  5,  3}, { 0,  7,  7,  5} },
-    { { 5,  3,  3,  0}, { 0,  4,  4,  1}, { 0,  5,  5,  2}, { 0,  6,  6,  3} },
-    { { 8,  4,  4,  0}, { 0,  4,  4,  0}, { 0,  4,  4,  0}, { 0,  4,  4,  0} },
-    { { 8,  4,  4,  0}, { 0,  4,  4,  0}, { 0,  4,  4,  0}, { 0,  4,  4,  0} },
-    { { 0,  4,  4,  8}, { 0,  8,  8, 12}, { 0, 13, 13, 17}, { 0, 17, 17, 21} },
-    { { 3,  1,  1,  0}, { 0,  4,  4,  2}, { 0,  6,  6,  5}, { 0,  9,  9,  7} },
-};
+/* static const uint8_t default_qmat[][4][4] = { */
+/*     { { 5,  3,  3,  0}, { 0,  4,  4,  1}, { 0,  5,  5,  2}, { 0,  6,  6,  3} }, */
+/*     { { 4,  2,  2,  0}, { 0,  4,  4,  2}, { 0,  5,  5,  3}, { 0,  7,  7,  5} }, */
+/*     { { 5,  3,  3,  0}, { 0,  4,  4,  1}, { 0,  5,  5,  2}, { 0,  6,  6,  3} }, */
+/*     { { 8,  4,  4,  0}, { 0,  4,  4,  0}, { 0,  4,  4,  0}, { 0,  4,  4,  0} }, */
+/*     { { 8,  4,  4,  0}, { 0,  4,  4,  0}, { 0,  4,  4,  0}, { 0,  4,  4,  0} }, */
+/*     { { 0,  4,  4,  8}, { 0,  8,  8, 12}, { 0, 13, 13, 17}, { 0, 17, 17, 21} }, */
+/*     { { 3,  1,  1,  0}, { 0,  4,  4,  2}, { 0,  6,  6,  5}, { 0,  9,  9,  7} }, */
+/* }; */
 
-static const int qscale_tab[MAX_QUANT+1] = {
-        4,     5,     6,     7,     8,    10,    11,    13,
-       16,    19,    23,    27,    32,    38,    45,    54,
-       64,    76,    91,   108,   128,   152,   181,   215,
-      256,   304,   362,   431,   512,   609,   724,   861,
-     1024,  1218,  1448,  1722,  2048,  2435,  2896,  3444,
-     4096,  4871,  5793,  6889,  8192,  9742, 11585, 13777,
-    16384, 19484, 23170, 27554, 32768, 38968, 46341, 55109,
-    65536, 77936
-};
+/* static const int qscale_tab[MAX_QUANT+1] = { */
+/*         4,     5,     6,     7,     8,    10,    11,    13, */
+/*        16,    19,    23,    27,    32,    38,    45,    54, */
+/*        64,    76,    91,   108,   128,   152,   181,   215, */
+/*       256,   304,   362,   431,   512,   609,   724,   861, */
+/*      1024,  1218,  1448,  1722,  2048,  2435,  2896,  3444, */
+/*      4096,  4871,  5793,  6889,  8192,  9742, 11585, 13777, */
+/*     16384, 19484, 23170, 27554, 32768, 38968, 46341, 55109, */
+/*     65536, 77936 */
+/* }; */
 
-static const int qoffset_intra_tab[MAX_QUANT+1] = {
-        1,     2,     3,     4,     4,     5,     6,     7,
-        8,    10,    12,    14,    16,    19,    23,    27,
-       32,    38,    46,    54,    64,    76,    91,   108,
-      128,   152,   181,   216,   256,   305,   362,   431,
-      512,   609,   724,   861,  1024,  1218,  1448,  1722,
-     2048,  2436,  2897,  3445,  4096,  4871,  5793,  6889,
-     8192,  9742, 11585, 13777, 16384, 19484, 23171, 27555,
-    32768, 38968
-};
+/* static const int qoffset_intra_tab[MAX_QUANT+1] = { */
+/*         1,     2,     3,     4,     4,     5,     6,     7, */
+/*         8,    10,    12,    14,    16,    19,    23,    27, */
+/*        32,    38,    46,    54,    64,    76,    91,   108, */
+/*       128,   152,   181,   216,   256,   305,   362,   431, */
+/*       512,   609,   724,   861,  1024,  1218,  1448,  1722, */
+/*      2048,  2436,  2897,  3445,  4096,  4871,  5793,  6889, */
+/*      8192,  9742, 11585, 13777, 16384, 19484, 23171, 27555, */
+/*     32768, 38968 */
+/* }; */
 
-static const int qoffset_inter_tab[MAX_QUANT+1] = {
-        1,     2,     2,     3,     3,     4,     4,     5,
-        6,     7,     9,    10,    12,    14,    17,    20,
-       24,    29,    34,    41,    48,    57,    68,    81,
-       96,   114,   136,   162,   192,   228,   272,   323,
-      384,   457,   543,   646,   768,   913,  1086,  1292,
-     1536,  1827,  2172,  2583,  3072,  3653,  4344,  5166,
-     6144,  7307,  8689, 10333, 12288, 14613, 17378, 20666,
-    24576, 29226
-};
+/* static const int qoffset_inter_tab[MAX_QUANT+1] = { */
+/*         1,     2,     2,     3,     3,     4,     4,     5, */
+/*         6,     7,     9,    10,    12,    14,    17,    20, */
+/*        24,    29,    34,    41,    48,    57,    68,    81, */
+/*        96,   114,   136,   162,   192,   228,   272,   323, */
+/*       384,   457,   543,   646,   768,   913,  1086,  1292, */
+/*      1536,  1827,  2172,  2583,  3072,  3653,  4344,  5166, */
+/*      6144,  7307,  8689, 10333, 12288, 14613, 17378, 20666, */
+/*     24576, 29226 */
+/* }; */
 
 // magic number division by 3 from schroedinger
 static inline int divide3(int x)
