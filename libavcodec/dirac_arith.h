@@ -30,6 +30,7 @@
 
 #include "bytestream.h"
 #include "get_bits.h"
+#include "put_bits.h"
 
 enum dirac_arith_contexts {
     CTX_ZPZN_F1,
@@ -80,7 +81,11 @@ typedef struct {
     const uint8_t *bytestream_end;
 
     uint16_t contexts[DIRAC_CTX_COUNT];
+
+  PutBitContext pb; //Encoder integration.
+
 } DiracArith;
+
 
 extern const uint8_t ff_dirac_next_ctx[DIRAC_CTX_COUNT];
 extern const uint16_t ff_dirac_prob[256];

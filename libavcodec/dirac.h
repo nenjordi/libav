@@ -38,6 +38,8 @@
 #include "dsputil.h"
 #include "diracdsp.h"
 
+#include "dirac_arith.h"
+
 typedef struct {
     unsigned width;
     unsigned height;
@@ -56,6 +58,10 @@ typedef struct {
 
     uint8_t pixel_range_index;      ///< index into dirac_pixel_range_presets[]
     uint8_t color_spec_index;       ///< index into dirac_color_spec_presets[]
+
+  /*dirac encoder*/
+  AVRational frame_rate;
+  AVRational aspect_ratio;
 } dirac_source_params;
 
 int ff_dirac_parse_sequence_header(AVCodecContext *avctx, GetBitContext *gb,
@@ -117,6 +123,14 @@ typedef struct Plane {
     int width;
     int height;
     int stride;
+
+
+  /*Encoder vars removed by Yuvi and needed for encoder*/
+    int padded_width;
+    int padded_height;
+  /*       ---             */
+  
+
 
     int idwt_width;
     int idwt_height;
@@ -224,6 +238,21 @@ typedef struct DiracContext {
 
   /*Encoder variables*/
   uint8_t *encodebuf;
+  DiracArith arith;
+
+  struct sequence_parameters
+  {
+    /* Information about the frames.  */
+    unsigned int luma_width;                ///< the luma component width
+    unsigned int luma_height;               ///< the luma component height
+    /** Choma format: 0: 4:4:4, 1: 4:2:2, 2: 4:2:0 */
+    unsigned int chroma_format;
+    unsigned char video_depth;              ///< depth in bits
+    
+    /* Calculated:  */
+    unsigned int chroma_width;              ///< the chroma component width
+    unsigned int chroma_height;             ///< the chroma component height
+  }sequence;
 } DiracContext;
 
 // [DIRAC_STD] Parse code values. 9.6.1 Table 9.1
@@ -284,7 +313,49 @@ static const int qoffset_inter_tab[MAX_QUANT+1] = {
     24576, 29226
 };
 
+const struct sequence_parameters dirac_sequence_parameters_defaults[13] = {
+  /* Width   Height   Chroma format   Depth  */
+  {  640,    480,     2,              8  },
+  {  176,    120,     2,              8  },
+  {  176,    144,     2,              8  },
+  {  352,    240,     2,              8  },
+  {  352,    288,     2,              8  },
+  {  704,    480,     2,              8  },
+  {  704,    576,     2,              8  },
+  {  720,    480,     2,              8  },
+  {  720,    576,     2,              8  },
+  {  1280,   720,     2,              8  },
+  {  1920,   1080,    2,              8  },
+  {  2048,   1556,    0,              16 },
+  {  4096,   3112,    0,              16 }
+};
 
+// defaults for source parameters
+static const dirac_source_params dirac_source_parameters_defaults[] = {
+    { 640,  480,  2, 0, 0, 1,  1, 640,  480,  0, 0, 1, 0 },
+    { 176,  120,  2, 0, 0, 9,  2, 176,  120,  0, 0, 1, 1 },
+    { 176,  144,  2, 0, 1, 10, 3, 176,  144,  0, 0, 1, 2 },
+    { 352,  240,  2, 0, 0, 9,  2, 352,  240,  0, 0, 1, 1 },
+    { 352,  288,  2, 0, 1, 10, 3, 352,  288,  0, 0, 1, 2 },
+    { 704,  480,  2, 0, 0, 9,  2, 704,  480,  0, 0, 1, 1 },
+    { 704,  576,  2, 0, 1, 10, 3, 704,  576,  0, 0, 1, 2 },
+    { 720,  480,  1, 1, 0, 4,  2, 704,  480,  8, 0, 3, 1 },
+    { 720,  576,  1, 1, 1, 3,  3, 704,  576,  8, 0, 3, 2 },
+
+    { 1280, 720,  1, 0, 1, 7,  1, 1280, 720,  0, 0, 3, 3 },
+    { 1280, 720,  1, 0, 1, 6,  1, 1280, 720,  0, 0, 3, 3 },
+    { 1920, 1080, 1, 1, 1, 4,  1, 1920, 1080, 0, 0, 3, 3 },
+    { 1920, 1080, 1, 1, 1, 3,  1, 1920, 1080, 0, 0, 3, 3 },
+    { 1920, 1080, 1, 0, 1, 7,  1, 1920, 1080, 0, 0, 3, 3 },
+    { 1920, 1080, 1, 0, 1, 6,  1, 1920, 1080, 0, 0, 3, 3 },
+    { 2048, 1080, 0, 0, 1, 2,  1, 2048, 1080, 0, 0, 4, 4 },
+    { 4096, 2160, 0, 0, 1, 2,  1, 4096, 2160, 0, 0, 4, 4 },
+
+    { 3840, 2160, 1, 0, 1, 7,  1, 3840, 2160, 0, 0, 3, 3 },
+    { 3840, 2160, 1, 0, 1, 6,  1, 3840, 2160, 0, 0, 3, 3 },
+    { 7680, 4320, 1, 0, 1, 7,  1, 3840, 2160, 0, 0, 3, 3 },
+    { 7680, 4320, 1, 0, 1, 6,  1, 3840, 2160, 0, 0, 3, 3 },
+};
 
 
 #endif /* AVCODEC_DIRAC_H */

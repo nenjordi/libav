@@ -33,9 +33,12 @@
 #include "get_bits.h"
 #include "bytestream.h"
 #include "golomb.h"
-#include "dirac_arith.h"
 #include "dwt.h"
 #include "mpeg12data.h"
+#include "dirac_encoder_wavelet.h"
+
+
+#define DIRAC_PARSE_INFO_PREFIX 0x42424344 //This should be moved to dirac.h or implement it as a function.
 
 static av_cold int encode_init(AVCodecContext *avctx)
 {
@@ -80,12 +83,12 @@ static int dirac_dwt(DiracContext *s, int16_t *coeffs)
         width = s->plane[level].width;
         height = s->plane[level].height;
 
-        if (s->refs)
-        dirac_subband_dwt_53(s->avctx, width, height, s->padded_width,
+        if (s->num_refs)
+            dirac_subband_dwt_53(s->avctx, width, height, s->plane[level].padded_width,
                              coeffs, level);
         else
-            dirac_subband_dwt_95(s->avctx, width, height,
-                                 s->padded_width, coeffs, level);
+            dirac_subband_dwt_97(s->avctx, width, height, 
+                                 s->plane[level].padded_width, coeffs, level); //95 -> 97 :p
     }
 
     return 0;
@@ -93,11 +96,11 @@ static int dirac_dwt(DiracContext *s, int16_t *coeffs)
 
 static void dirac_encode_parse_info(DiracContext *s, int parsecode)
 {
-    put_bits(&s->pb, 32, DIRAC_PARSE_INFO_PREFIX);
-    put_bits(&s->pb, 8,  parsecode);
+    put_bits(&s->arith.pb, 32, DIRAC_PARSE_INFO_PREFIX);
+    put_bits(&s->arith.pb, 8,  parsecode);
     /* XXX: These will be filled in after encoding. */
-    put_bits(&s->pb, 32, 0);
-    put_bits(&s->pb, 32, 0);
+    put_bits(&s->arith.pb, 32, 0);
+    put_bits(&s->arith.pb, 32, 0);
 }
 
 static void dirac_encode_sequence_parameters(DiracContext *s)
@@ -123,45 +126,47 @@ static void dirac_encode_sequence_parameters(DiracContext *s)
 
     /* Set video format to 0.  In the future a best match is perhaps
        better. */
-    dirac_set_ue_golomb(&s->pb, video_format);
+    //dirac_set_ue_golomb(&s->arith.pb, video_format);
+    set_ue_golomb(&s->arith.pb, video_format); //Jordi
 
 
     /* Override image dimensions. */
     if (seq->luma_width != seqdef->luma_width
         || seq->luma_height != seqdef->luma_height) {
-        put_bits(&s->pb, 1, 1);
+        put_bits(&s->arith.pb, 1, 1);
 
-        dirac_set_ue_golomb(&s->pb, seq->luma_width);
-        dirac_set_ue_golomb(&s->pb, seq->luma_height);
+        /* dirac_set_ue_golomb(&s->arith.pb, seq->luma_width); */
+        set_ue_golomb(&s->arith.pb, seq->luma_width); //Jordi
+        set_ue_golomb(&s->arith.pb, seq->luma_height);
     } else {
-        put_bits(&s->pb, 1, 0);
+        put_bits(&s->arith.pb, 1, 0);
     }
 
     /* Override chroma format. */
     if (seq->chroma_format != seqdef->chroma_format) {
-        put_bits(&s->pb, 1, 1);
+        put_bits(&s->arith.pb, 1, 1);
 
         /* XXX: Hardcoded to 4:2:0. */
-        dirac_set_ue_golomb(&s->pb, 2);
+        set_ue_golomb(&s->arith.pb, 2);
     } else {
-        put_bits(&s->pb, 1, 0);
+        put_bits(&s->arith.pb, 1, 0);
     }
 
     /* Override video depth. */
     if (seq->video_depth != seqdef->video_depth) {
-        put_bits(&s->pb, 1, 1);
+        put_bits(&s->arith.pb, 1, 1);
 
-        dirac_set_ue_golomb(&s->pb, seq->video_depth);
+        set_ue_golomb(&s->arith.pb, seq->video_depth);
     } else {
-        put_bits(&s->pb, 1, 0);
+        put_bits(&s->arith.pb, 1, 0);
     }
 }
 
 static void dirac_encode_source_parameters(DiracContext *s)
 {
     AVCodecContext *avctx = s->avctx;
-    struct source_parameters *source = &s->source;
-    const struct source_parameters *sourcedef;
+    dirac_source_params *source = &s->source;
+    const dirac_source_params *sourcedef;
     int video_format = 0;
 
     sourcedef = &dirac_source_parameters_defaults[video_format];
@@ -180,60 +185,60 @@ static void dirac_encode_source_parameters(DiracContext *s)
 
     /* Override interlacing options. */
     if (source->interlaced != sourcedef->interlaced) {
-        put_bits(&s->pb, 1, 1);
+        put_bits(&s->arith.pb, 1, 1);
 
-        put_bits(&s->pb, 1, source->interlaced);
+        put_bits(&s->arith.pb, 1, source->interlaced);
 
         /* Override top field first flag. */
         if (source->top_field_first != sourcedef->top_field_first) {
-            put_bits(&s->pb, 1, 1);
+            put_bits(&s->arith.pb, 1, 1);
 
-            put_bits(&s->pb, 1, source->top_field_first);
+            put_bits(&s->arith.pb, 1, source->top_field_first);
 
         } else {
-            put_bits(&s->pb, 1, 0);
+            put_bits(&s->arith.pb, 1, 0);
         }
 
         /* Override sequential fields flag. */
-        if (source->sequential_fields != sourcedef->sequential_fields) {
-            put_bits(&s->pb, 1, 1);
+        xif (source->sequential_fields != sourcedef->sequential_fields) {
+            put_bits(&s->arith.pb, 1, 1);
 
-            put_bits(&s->pb, 1, source->sequential_fields);
+            put_bits(&s->arith.pb, 1, source->sequential_fields);
 
         } else {
-            put_bits(&s->pb, 1, 0);
+            put_bits(&s->arith.pb, 1, 0);
         }
 
     } else {
-        put_bits(&s->pb, 1, 0);
+        put_bits(&s->arith.pb, 1, 0);
     }
 
     /* Override frame rate. */
     if (av_cmp_q(source->frame_rate, sourcedef->frame_rate) != 0) {
-        put_bits(&s->pb, 1, 1);
+        put_bits(&s->arith.pb, 1, 1);
 
         /* XXX: Some default frame rates can be used.  For now just
            set the index to 0 and write the frame rate. */
-        dirac_set_ue_golomb(&s->pb, 0);
+        set_ue_golomb(&s->arith.pb, 0);
 
-        dirac_set_ue_golomb(&s->pb, source->frame_rate.num);
-        dirac_set_ue_golomb(&s->pb, source->frame_rate.den);
+        set_ue_golomb(&s->arith.pb, source->frame_rate.num);
+        set_ue_golomb(&s->arith.pb, source->frame_rate.den);
     } else {
-        put_bits(&s->pb, 1, 0);
+        put_bits(&s->arith.pb, 1, 0);
     }
 
     /* Override aspect ratio. */
     if (av_cmp_q(source->aspect_ratio, sourcedef->aspect_ratio) != 0) {
-        put_bits(&s->pb, 1, 1);
+        put_bits(&s->arith.pb, 1, 1);
 
         /* XXX: Some default aspect ratios can be used.  For now just
            set the index to 0 and write the aspect ratio. */
-        dirac_set_ue_golomb(&s->pb, 0);
+        set_ue_golomb(&s->arith.pb, 0);
 
-        dirac_set_ue_golomb(&s->pb, source->aspect_ratio.num);
-        dirac_set_ue_golomb(&s->pb, source->aspect_ratio.den);
+        set_ue_golomb(&s->arith.pb, source->aspect_ratio.num);
+        set_ue_golomb(&s->arith.pb, source->aspect_ratio.den);
     } else {
-        put_bits(&s->pb, 1, 0);
+        put_bits(&s->arith.pb, 1, 0);
     }
 
     /* Override clean area. */
@@ -241,14 +246,14 @@ static void dirac_encode_source_parameters(DiracContext *s)
         || source->clean_height != sourcedef->clean_height
         || source->clean_left_offset != sourcedef->clean_left_offset
         || source->clean_right_offset != sourcedef->clean_right_offset) {
-        put_bits(&s->pb, 1, 1);
+        put_bits(&s->arith.pb, 1, 1);
 
-        dirac_set_ue_golomb(&s->pb, source->clean_width);
-        dirac_set_ue_golomb(&s->pb, source->clean_height);
-        dirac_set_ue_golomb(&s->pb, source->clean_left_offset);
-        dirac_set_ue_golomb(&s->pb, source->clean_right_offset);
+        set_ue_golomb(&s->arith.pb, source->clean_width);
+        set_ue_golomb(&s->arith.pb, source->clean_height);
+        set_ue_golomb(&s->arith.pb, source->clean_left_offset);
+        set_ue_golomb(&s->arith.pb, source->clean_right_offset);
     } else {
-        put_bits(&s->pb, 1, 0);
+        put_bits(&s->arith.pb, 1, 0);
     }
 
     /* Override signal range. */
@@ -256,34 +261,34 @@ static void dirac_encode_source_parameters(DiracContext *s)
         || source->luma_excursion != sourcedef->luma_excursion
         || source->chroma_offset != sourcedef->chroma_offset
         || source->chroma_excursion != sourcedef->chroma_excursion) {
-        put_bits(&s->pb, 1, 1);
+        put_bits(&s->arith.pb, 1, 1);
 
         /* XXX: Some default signal ranges can be used.  For now just
            set the index to 0 and write the signal range. */
-        dirac_set_ue_golomb(&s->pb, 0);
+        set_ue_golomb(&s->arith.pb, 0);
 
-        dirac_set_ue_golomb(&s->pb, source->luma_offset);
-        dirac_set_ue_golomb(&s->pb, source->luma_excursion);
-        dirac_set_ue_golomb(&s->pb, source->chroma_offset);
-        dirac_set_ue_golomb(&s->pb, source->chroma_excursion);
+        set_ue_golomb(&s->arith.pb, source->luma_offset);
+        set_ue_golomb(&s->arith.pb, source->luma_excursion);
+        set_ue_golomb(&s->arith.pb, source->chroma_offset);
+        set_ue_golomb(&s->arith.pb, source->chroma_excursion);
     } else {
-        put_bits(&s->pb, 1, 0);
+        put_bits(&s->arith.pb, 1, 0);
     }
 
     /* Override color spec. */
     /* XXX: For now this won't be overridden at all.  Just set this to
        defaults. */
-    put_bits(&s->pb, 1, 0);
+    put_bits(&s->arith.pb, 1, 0);
 }
 
 static void dirac_encode_access_unit_header(DiracContext *s)
 {
     /* First write the Access Unit Parse Parameters. */
 
-    dirac_set_ue_golomb(&s->pb, 0); /* version major */
-    dirac_set_ue_golomb(&s->pb, 1); /* version minor */
-    dirac_set_ue_golomb(&s->pb, 0); /* profile */
-    dirac_set_ue_golomb(&s->pb, 0); /* level */
+    set_ue_golomb(&s->arith.pb, 0); /* version major */
+    set_ue_golomb(&s->arith.pb, 1); /* version minor */
+    set_ue_golomb(&s->arith.pb, 0); /* profile */
+    set_ue_golomb(&s->arith.pb, 0); /* level */
 
     dirac_encode_sequence_parameters(s);
     dirac_encode_source_parameters(s);
@@ -394,7 +399,7 @@ void dirac_arithblk_writelen(DiracContext *s,  PutBitContext *pb)
     dirac_put_arith_terminate(&s->arith);
     flush_put_bits(pb);
     length = put_bits_count(pb) / 8;
-    dirac_set_ue_golomb(&s->pb, length);
+    set_ue_golomb(&s->arith.pb, length);
 }
 
 static inline
@@ -405,12 +410,12 @@ void dirac_arithblk_writedata(DiracContext *s, PutBitContext *pb)
 
     length = put_bits_count(pb) / 8;
 
-    align_put_bits(&s->pb);
+    align_put_bits(&s->arith.pb);
     /* XXX: Use memmove. */
-    flush_put_bits(&s->pb);
-    buf = pbBufPtr(&s->pb);
+    flush_put_bits(&s->arith.pb);
+    buf = pbBufPtr(&s->arith.pb);
     memcpy(buf, s->encodebuf, length);
-    skip_put_bytes(&s->pb, length);
+    skip_put_bytes(&s->arith.pb, length);
 }
 
 static int encode_subband(DiracContext *s, int level,
@@ -424,7 +429,7 @@ static int encode_subband(DiracContext *s, int level,
     init_put_bits(&pb, s->encodebuf, (1 << 20) * 8);
     dirac_init_arith_encoder(&s->arith, &pb);
 
-    if (level == 0 && s->refs == 0)
+    if (level == 0 && s->num_refs == 0)
         intra_dc_coding(s, coeffs);
 
     for (ypos = 0; ypos < s->codeblocksv[level]; ypos++)
@@ -434,7 +439,7 @@ static int encode_subband(DiracContext *s, int level,
     dirac_arithblk_writelen(s, &pb);
 
     /* Write quantizer index.  XXX: No quantization? */
-    dirac_set_ue_golomb(&s->pb, 0);
+    set_ue_golomb(&s->arith.pb, 0);
 
     dirac_arithblk_writedata(s, &pb);
 
@@ -448,7 +453,7 @@ static int dirac_encode_component(DiracContext *s, int comp)
     int16_t *coeffs;
     int x, y;
 
-    align_put_bits(&s->pb);
+    align_put_bits(&s->arith.pb);
 
     if (comp == 0) {
         s->width         = s->sequence.luma_width;
@@ -476,7 +481,7 @@ static int dirac_encode_component(DiracContext *s, int comp)
     }
 
     /* Subtract motion compensated data to calculate the residue. */
-    if (s->refs) {
+    if (s->num_refs) {
         int x, y;
         int16_t *coeffline;
         int16_t *mcline;
@@ -537,7 +542,7 @@ static void blockmode_encode(DiracContext *s, int x, int y)
     res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_REF1, 0);
     dirac_put_arith_bit(&s->arith, ARITH_CONTEXT_PMODE_REF2, res);
 
-    if (s->refs == 2) {
+    if (s->num_refs == 2) {
         res = (s->blmotion[y * s->blwidth + x].use_ref
                & DIRAC_REF_MASK_REF2) >> 1;
         res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_REF2, 1);
@@ -710,7 +715,7 @@ static int dirac_encode_blockdata(DiracContext *s)
     dirac_arithblk_writedata(s, &pb);
 
     /* Pack the motion vectors. */
-    for (i = 0; i < s->refs; i++) {
+    for (i = 0; i < s->num_refs; i++) {
         dirac_pack_motion_vectors(s, i, 0);
         dirac_pack_motion_vectors(s, i, 1);
     }
@@ -743,7 +748,7 @@ static int dirac_encode_blockdata(DiracContext *s)
 
 static int dirac_pack_prediction_parameters(DiracContext *s)
 {
-    PutBitContext *pb = &s->pb;
+    PutBitContext *pb = &s->arith.pb;
 
     /* Use default block parameters. */
     put_bits(pb, 1, 0);
@@ -751,7 +756,7 @@ static int dirac_pack_prediction_parameters(DiracContext *s)
     /* Motion vector precision: Use qpel interpolation (2 bits
        precision) for now. */
     put_bits(pb, 1, 1);
-    dirac_set_ue_golomb(pb, 2);
+    set_ue_golomb(pb, 2);
 
     /* Do not use Global Motion Estimation. */
     put_bits(pb, 1, 0);
@@ -783,7 +788,7 @@ static int dirac_pack_prediction_parameters(DiracContext *s)
 
 static int dirac_encode_frame(DiracContext *s)
 {
-    PutBitContext *pb = &s->pb;
+    PutBitContext *pb = &s->arith.pb;
     int comp;
     int i;
 
@@ -801,7 +806,7 @@ static int dirac_encode_frame(DiracContext *s)
 
     /* Set defaults for the codeblocks. */
     for (i = 0; i <= s->frame_decoding.wavelet_depth; i++) {
-        if (s->refs == 0) {
+        if (s->num_refs == 0) {
             s->codeblocksh[i] = i <= 2 ? 1 : 4;
             s->codeblocksv[i] = i <= 2 ? 1 : 3;
         } else {
@@ -822,24 +827,24 @@ static int dirac_encode_frame(DiracContext *s)
     s->picnum = s->avctx->frame_number - 1;
     put_bits(pb, 32, s->picnum);
 
-    for (i = 0; i < s->refs; i++)
+    for (i = 0; i < s->num_refs; i++)
         dirac_set_se_golomb(pb, s->ref[i] - s->picnum);
 
     /* Write retire pictures list. */
     if (s->refcnt == 0) {
-        dirac_set_ue_golomb(pb, 0);
-    } else if (s->refs == 0) {
+        set_ue_golomb(pb, 0);
+    } else if (s->num_refs == 0) {
         /* This is a new intra frame, remove all old reference
            frames. */
-        dirac_set_ue_golomb(pb, 1);
+        set_ue_golomb(pb, 1);
         dirac_set_se_golomb(pb, s->refframes[0].frame.display_picture_number
                             - s->picnum);
     } else {
-        dirac_set_ue_golomb(pb, 0);
+        set_ue_golomb(pb, 0);
     }
 
     /* Pack the ME data. */
-    if (s->refs) {
+    if (s->num_refs) {
         align_put_bits(pb);
         if (dirac_pack_prediction_parameters(s))
             return -1;
@@ -851,7 +856,7 @@ static int dirac_encode_frame(DiracContext *s)
     align_put_bits(pb);
 
     /* Wavelet transform parameters. */
-    if (s->refs == 0) {
+    if (s->num_refs == 0) {
         s->zero_res = 0;
     } else {
         /* XXX: Actually, calculate if the residue is zero. */
@@ -864,10 +869,10 @@ static int dirac_encode_frame(DiracContext *s)
 
     /* Set the default filter to LeGall for inter frames and
        Deslauriers-Debuc for intra frames. */
-    if (s->refs)
-    dirac_set_ue_golomb(pb, 1);
+    if (s->num_refs)
+    set_ue_golomb(pb, 1);
     else
-        dirac_set_ue_golomb(pb, 0);
+        set_ue_golomb(pb, 0);
 
     /* Do not override the default depth. */
     put_bits(pb, 1, 0);
@@ -879,7 +884,7 @@ static int dirac_encode_frame(DiracContext *s)
     put_bits(pb, 1, 0);
 
     /* Codeblock mode. */
-    dirac_set_ue_golomb(pb, 0);
+    set_ue_golomb(pb, 0);
 
 
     /* Write the transform data. */
@@ -902,12 +907,12 @@ static int encode_frame(AVCodecContext *avctx, unsigned char *buf,
     static int intercnt = 0;
 
     reference = (s->next_parse_code & 0x04) == 0x04;
-    s->refs   = s->next_parse_code & 0x03;
+    s->num_refs   = s->next_parse_code & 0x03;
 
     dprintf(avctx, "Encoding frame %p size=%d of type=%02X isref=%d refs=%d\n",
-            buf, buf_size, s->next_parse_code, reference, s->refs);
+            buf, buf_size, s->next_parse_code, reference, s->num_refs);
 
-    init_put_bits(&s->pb, buf, buf_size);
+    init_put_bits(&s->arith.pb, buf, buf_size);
     s->avctx = avctx;
     s->picture = *picture;
 
@@ -929,8 +934,8 @@ static int encode_frame(AVCodecContext *avctx, unsigned char *buf,
         }
     }
 
-    flush_put_bits(&s->pb);
-    size = put_bits_count(&s->pb) / 8;
+    flush_put_bits(&s->arith.pb);
+    size = put_bits_count(&s->arith.pb) / 8;
 
     bytestream_put_be32(&dst, size);
     bytestream_put_be32(&dst, s->prev_size);
