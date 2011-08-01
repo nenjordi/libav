@@ -727,7 +727,7 @@ static void decode_lowdelay(DiracContext *s)
     align_get_bits(&s->gb);
     //[DIRAC_STD] 13.5.2 Slices. slice(sx,sy)
     buf = s->gb.buffer + get_bits_count(&s->gb)/8;
-    bufsize = get_bits_left(&s->gb)/8;    
+    bufsize = get_bits_left(&s->gb);    
    
     for (slice_y = 0; slice_y < s->lowdelay.num_y; slice_y++)
         for (slice_x = 0; slice_x < s->lowdelay.num_x; slice_x++) {
@@ -749,7 +749,6 @@ end:
 
     avctx->execute(avctx, decode_lowdelay_slice, slices, NULL, slice_num,
                    sizeof(struct lowdelay_slice)); //[DIRAC_STD] 13.5.2 Slices
-
     intra_dc_prediction(&s->plane[0].band[0][0]); //[DIRAC_STD] 13.3 intra_dc_prediction()
     intra_dc_prediction(&s->plane[1].band[0][0]); //[DIRAC_STD] 13.3 intra_dc_prediction()
     intra_dc_prediction(&s->plane[2].band[0][0]); //[DIRAC_STD] 13.3 intra_dc_prediction()
@@ -1514,8 +1513,8 @@ static int dirac_decode_frame_internal(DiracContext *s)
   DWTContext d;
   int y, i, comp, dsty;
 
-  /*
-    if (s->low_delay) {
+  
+  if (s->low_delay) {
     //[DIRAC_STD] 13.5.1 low_delay_transform_data()
     for (comp = 0; comp < 3; comp++) {
       Plane *p = &s->plane[comp];
@@ -1523,8 +1522,8 @@ static int dirac_decode_frame_internal(DiracContext *s)
     }
     if (!s->zero_res)
       decode_lowdelay(s);	
-      }
-*/
+  }
+  
 
   for (comp = 0; comp < 3; comp++) {
     Plane *p = &s->plane[comp];
@@ -1534,19 +1533,14 @@ static int dirac_decode_frame_internal(DiracContext *s)
     for (i = 0; i < 4; i++)
       s->edge_emu_buffer[i] = s->edge_emu_buffer_base + i*FFALIGN(p->width, 16);
 
-    memset(p->idwt_buf, 0, p->idwt_stride * p->idwt_height * sizeof(IDWTELEM));
     if (!s->zero_res && !s->low_delay)
       {
-	decode_component(s, comp); //[DIRAC_STD] 13.4.1 core_transform_data()
+	memset(p->idwt_buf, 0, p->idwt_stride * p->idwt_height * sizeof(IDWTELEM));
+  	decode_component(s, comp); //[DIRAC_STD] 13.4.1 core_transform_data()
       }
-    else if (!s->zero_res && s->low_delay) 
-      {
-	decode_lowdelay(s); //[DIRAC_STD] 13.5.1 low_delay_transform_data()	
-      }
-
     if (ff_spatial_idwt_init2(&d, p->idwt_buf, p->idwt_width, p->idwt_height, p->idwt_stride,
 			      s->wavelet_idx+2, s->wavelet_depth, p->idwt_tmp))
-      return -1;
+	return -1;
 
     if (!s->num_refs) { //intra
       for (y = 0; y < p->height; y += 16) {
@@ -1605,6 +1599,9 @@ static int dirac_decode_picture_header(DiracContext *s)
 
     //[DIRAC_STD] 11.1.1 Picture Header. picture_header() PICTURE_NUM
     picnum = s->current_picture->display_picture_number = get_bits_long(gb, 32);
+
+
+    av_log(s->avctx,AV_LOG_DEBUG,"PICTURE_NUM: %d\n",picnum);
 
     // if this is the first keyframe after a sequence header, start our
     // reordering from here
