@@ -3,20 +3,20 @@
  * Copyright (C) 2009 David Conrad
  * Copyright (C) 2011 Jordi Ortiz
  *
- * This file is part of FFmpeg.
+ * This file is part of Libav.
  *
- * FFmpeg is free software; you can redistribute it and/or
+ * Libav is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
  * version 2.1 of the License, or (at your option) any later version.
  *
- * FFmpeg is distributed in the hope that it will be useful,
+ * Libav is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with FFmpeg; if not, write to the Free Software
+ * License along with Libav; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
@@ -36,8 +36,6 @@
 #include "dwt.h"
 #include "dirac.h"
 #include "diracdsp.h"
-
-#undef printf
 
 /**
  * The spec limits the number of wavelet decompositions to 4 for both
@@ -74,17 +72,16 @@
 
 #define ff_emulated_edge_mc ff_emulated_edge_mc_8 /* Fix: change the calls to this function regarding bit depth */
 
-#define CALC_PADDING(size, depth) \
-         (((size + (1 << depth) - 1) >> depth) << depth)
+#define CALC_PADDING(size, depth)                       \
+    (((size + (1 << depth) - 1) >> depth) << depth)
 
 #define DIVRNDUP(a, b) (((a) + (b) - 1) / (b))
 
 typedef struct {
-  AVFrame avframe;
-
+    AVFrame avframe;
     int interpolated[3];    /* 1 if hpel[] is valid */
-  uint8_t *hpel[3][4];
-  uint8_t *hpel_base[3][4];
+    uint8_t *hpel[3][4];
+    uint8_t *hpel_base[3][4];
 } DiracFrame;
 
 typedef struct {
@@ -248,35 +245,35 @@ static const uint8_t default_qmat[][4][4] = {
 };
 
 static const int qscale_tab[MAX_QUANT+1] = {
-        4,     5,     6,     7,     8,    10,    11,    13,
-       16,    19,    23,    27,    32,    38,    45,    54,
-       64,    76,    91,   108,   128,   152,   181,   215,
-      256,   304,   362,   431,   512,   609,   724,   861,
-     1024,  1218,  1448,  1722,  2048,  2435,  2896,  3444,
-     4096,  4871,  5793,  6889,  8192,  9742, 11585, 13777,
+    4,     5,     6,     7,     8,    10,    11,    13,
+    16,    19,    23,    27,    32,    38,    45,    54,
+    64,    76,    91,   108,   128,   152,   181,   215,
+    256,   304,   362,   431,   512,   609,   724,   861,
+    1024,  1218,  1448,  1722,  2048,  2435,  2896,  3444,
+    4096,  4871,  5793,  6889,  8192,  9742, 11585, 13777,
     16384, 19484, 23170, 27554, 32768, 38968, 46341, 55109,
     65536, 77936
 };
 
 static const int qoffset_intra_tab[MAX_QUANT+1] = {
-        1,     2,     3,     4,     4,     5,     6,     7,
-        8,    10,    12,    14,    16,    19,    23,    27,
-       32,    38,    46,    54,    64,    76,    91,   108,
-      128,   152,   181,   216,   256,   305,   362,   431,
-      512,   609,   724,   861,  1024,  1218,  1448,  1722,
-     2048,  2436,  2897,  3445,  4096,  4871,  5793,  6889,
-     8192,  9742, 11585, 13777, 16384, 19484, 23171, 27555,
+    1,     2,     3,     4,     4,     5,     6,     7,
+    8,    10,    12,    14,    16,    19,    23,    27,
+    32,    38,    46,    54,    64,    76,    91,   108,
+    128,   152,   181,   216,   256,   305,   362,   431,
+    512,   609,   724,   861,  1024,  1218,  1448,  1722,
+    2048,  2436,  2897,  3445,  4096,  4871,  5793,  6889,
+    8192,  9742, 11585, 13777, 16384, 19484, 23171, 27555,
     32768, 38968
 };
 
 static const int qoffset_inter_tab[MAX_QUANT+1] = {
-        1,     2,     2,     3,     3,     4,     4,     5,
-        6,     7,     9,    10,    12,    14,    17,    20,
-       24,    29,    34,    41,    48,    57,    68,    81,
-       96,   114,   136,   162,   192,   228,   272,   323,
-      384,   457,   543,   646,   768,   913,  1086,  1292,
-     1536,  1827,  2172,  2583,  3072,  3653,  4344,  5166,
-     6144,  7307,  8689, 10333, 12288, 14613, 17378, 20666,
+    1,     2,     2,     3,     3,     4,     4,     5,
+    6,     7,     9,    10,    12,    14,    17,    20,
+    24,    29,    34,    41,    48,    57,    68,    81,
+    96,   114,   136,   162,   192,   228,   272,   323,
+    384,   457,   543,   646,   768,   913,  1086,  1292,
+    1536,  1827,  2172,  2583,  3072,  3653,  4344,  5166,
+    6144,  7307,  8689, 10333, 12288, 14613, 17378, 20666,
     24576, 29226
 };
 
