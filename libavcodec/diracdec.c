@@ -399,7 +399,7 @@ static av_cold int dirac_decode_init(AVCodecContext *avctx)
         return AVERROR_PATCHWELCOME;
     }
 
-    dsputil_init(&s->dsp, avctx);
+    ff_dsputil_init(&s->dsp, avctx);
     ff_diracdsp_init(&s->diracdsp);
 
     return 0;
@@ -1734,7 +1734,7 @@ static int dirac_decode_data_unit(AVCodecContext *avctx, const uint8_t *buf, int
             return 0;
 
         /* [DIRAC_STD] 10. Sequence header */
-        if (ff_dirac_parse_sequence_header(avctx, &s->gb, &s->source))
+        if (avpriv_dirac_parse_sequence_header(avctx, &s->gb, &s->source))
             return -1;
 
         avcodec_get_chroma_sub_sample(avctx->pix_fmt, &s->chroma_x_shift, &s->chroma_y_shift);
