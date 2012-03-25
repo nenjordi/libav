@@ -1818,6 +1818,7 @@ static int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     s->current_picture = NULL;
     *data_size = 0;
 
+
     /* end of stream, so flush delayed pics */
     if (buf_size == 0)
         return get_delayed_pic(s, (AVFrame *)data, data_size);
@@ -1831,6 +1832,15 @@ static int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                 buf[buf_idx+2] == 'C' && buf[buf_idx+3] == 'D')
                 break;
         }
+
+        if(buf[buf_idx + 4] == pc_eos) /* End of stream reached  */
+        {
+            data = NULL;
+            *data_size = 0;
+            return buf_size; /* Allow file descriptor to reach EOF */
+        }
+
+
         /* BBCD found or end of data */
         if (buf_idx + DATA_UNIT_HEADER_SIZE >= buf_size)
             break;
