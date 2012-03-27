@@ -1924,10 +1924,9 @@ AVCodec ff_dirac_decoder = {
     .id             = CODEC_ID_DIRAC,
     .priv_data_size = sizeof(DiracContext),
     .init           = dirac_decode_init,
-    .encode         = NULL,
     .close          = dirac_decode_end,
     .decode         = dirac_decode_frame,
-    .capabilities   = CODEC_CAP_DR1 | CODEC_CAP_DELAY,
+    .capabilities   = CODEC_CAP_DELAY,
     .flush          = dirac_decode_flush,
     .long_name      = NULL_IF_CONFIG_SMALL("BBC Dirac VC-2"),
 };
