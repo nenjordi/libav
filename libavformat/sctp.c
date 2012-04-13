@@ -19,6 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 #include "avformat.h"
+#include "url.h"
 #include <unistd.h>
 #include "internal.h"
 #include "network.h"
@@ -69,7 +70,7 @@ static int sctp_open(URLContext *h, const char *uri, int flags)
         goto fail;
     ff_socket_nonblock(fd, 1);
 
-    if(flags & URL_WRONLY) {
+    if(flags & AVIO_FLAG_READ) {
         ret = connect(fd, cur_ai->ai_addr, cur_ai->ai_addrlen);
     } else {
         ret = bind(fd, cur_ai->ai_addr, cur_ai->ai_addrlen);
@@ -127,7 +128,7 @@ static int sctp_read(URLContext *h, uint8_t *buf, int size)
     SCTPContext *s = h->priv_data;
     int ret;
 
-    if (!(h->flags & URL_FLAG_NONBLOCK)) {
+    if (!(h->flags & AVIO_FLAG_NONBLOCK)) {
         ret = sctp_wait_fd(s->fd, 0);
         if (ret < 0)
             return ret;
@@ -144,7 +145,7 @@ static int sctp_write(URLContext *h, const uint8_t *buf, int size)
     SCTPContext *s = h->priv_data;
     int ret;
 
-    if (!(h->flags & URL_FLAG_NONBLOCK)) {
+    if (!(h->flags & AVIO_FLAG_NONBLOCK)) {
         ret = sctp_wait_fd(s->fd, 1);
         if (ret < 0)
             return ret;
