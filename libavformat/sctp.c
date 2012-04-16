@@ -336,10 +336,10 @@ static int sctp_get_file_handle(URLContext *h)
 
 URLProtocol ff_sctp_protocol = {
     "sctp",
-    sctp_open,
-    sctp_read,
-    sctp_write,
-    NULL, /* seek */
-    sctp_close,
+    .url_open  = sctp_open,
+    .url_read  = sctp_read,
+    .url_write = sctp_write,
+    .url_seek  = NULL, /* seek */
+    .url_close = sctp_close,
     .url_get_file_handle = sctp_get_file_handle,
 };
