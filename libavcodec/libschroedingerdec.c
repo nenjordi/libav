@@ -40,6 +40,12 @@
 #include <schroedinger/schrodebug.h>
 #include <schroedinger/schrovideoformat.h>
 
+/** SchroFrame and Pts relation */
+typedef struct SchroFrameWithPts {
+     SchroFrame *frame;
+     uint64_t pts;
+} SchroFrameWithPts;
+
 /** libschroedinger decoder private data */
 typedef struct SchroDecoderParams {
     /** Schroedinger video format */
@@ -61,7 +67,10 @@ typedef struct SchroDecoderParams {
     int eos_pulled;
 
     /** decoded picture */
-    AVPicture dec_pic;
+    AVFrame dec_frame;
+
+    /** stores the last positive pts */
+    uint64_t lastPTS;
 } SchroDecoderParams;
 
 typedef struct SchroParseUnitContext {
@@ -135,6 +144,7 @@ static enum PixelFormat get_chroma_format(SchroChromaFormat schro_pix_fmt)
 static av_cold int libschroedinger_decode_init(AVCodecContext *avccontext)
 {
 
+    int idx;
     SchroDecoderParams *p_schro_params = avccontext->priv_data;
     /* First of all, initialize our supporting libraries. */
     schro_init();
@@ -192,11 +202,8 @@ static void libschroedinger_handle_first_access_unit(AVCodecContext *avccontext)
     avccontext->time_base.den = p_schro_params->format->frame_rate_numerator;
     avccontext->time_base.num = p_schro_params->format->frame_rate_denominator;
 
-    if (!p_schro_params->dec_pic.data[0])
-        avpicture_alloc(&p_schro_params->dec_pic,
-                        avccontext->pix_fmt,
-                        avccontext->width,
-                        avccontext->height);
+    if (!p_schro_params->dec_frame.data[0])
+        avccontext->get_buffer(avccontext,&p_schro_params->dec_frame);
 }
 
 static int libschroedinger_decode_frame(AVCodecContext *avccontext,
@@ -205,16 +212,21 @@ static int libschroedinger_decode_frame(AVCodecContext *avccontext,
 {
     const uint8_t *buf = avpkt->data;
     int buf_size = avpkt->size;
+    int64_t pts = avpkt->pts;
+    SchroTag *tag;
 
     SchroDecoderParams *p_schro_params = avccontext->priv_data;
     SchroDecoder *decoder = p_schro_params->decoder;
-    AVPicture *picture = data;
     SchroBuffer *enc_buf;
     SchroFrame* frame;
     int state;
     int go = 1;
     int outer = 1;
     SchroParseUnitContext parse_ctx;
+    SchroFrameWithPts *framewithpts = NULL;
+
+    if(pts >= 0)
+        p_schro_params->lastPTS = pts;
 
     *data_size = 0;
 
@@ -229,6 +241,12 @@ static int libschroedinger_decode_frame(AVCodecContext *avccontext,
     /* Loop through all the individual parse units in the input buffer */
     do {
         if ((enc_buf = FindNextSchroParseUnit(&parse_ctx))) {
+
+            /* Set Schrotag with the pts to be recovered after decoding*/
+            enc_buf->tag =
+                schro_tag_new(av_malloc(sizeof(uint64_t)),av_free);
+            *((uint64_t*)enc_buf->tag->value) = p_schro_params->lastPTS;
+
             /* Push buffer into decoder. */
             if (SCHRO_PARSE_CODE_IS_PICTURE(enc_buf->data[4]) &&
                 SCHRO_PARSE_CODE_NUM_REFS(enc_buf->data[4]) > 0)
@@ -262,11 +280,20 @@ static int libschroedinger_decode_frame(AVCodecContext *avccontext,
 
             case SCHRO_DECODER_OK:
                 /* Pull a frame out of the decoder. */
+                tag = schro_decoder_get_picture_tag(decoder);
                 frame = schro_decoder_pull(decoder);
 
                 if (frame)
-                    ff_dirac_schro_queue_push_back(&p_schro_params->dec_frame_queue,
-                                                   frame);
+                {
+                    /* Add relation between schroframe and pts. */
+                    framewithpts = (SchroFrameWithPts *)av_malloc(
+                        sizeof(SchroFrameWithPts));
+                    framewithpts->frame = frame;
+                    framewithpts->pts   = *(uint64_t*)tag->value;
+                    ff_dirac_schro_queue_push_back(
+                        &p_schro_params->dec_frame_queue,
+                        framewithpts);
+                }
                 break;
             case SCHRO_DECODER_EOS:
                 go = 0;
@@ -283,30 +310,42 @@ static int libschroedinger_decode_frame(AVCodecContext *avccontext,
     } while (outer);
 
     /* Grab next frame to be returned from the top of the queue. */
-    frame = ff_dirac_schro_queue_pop(&p_schro_params->dec_frame_queue);
+    framewithpts = ff_dirac_schro_queue_pop(&p_schro_params->dec_frame_queue);
 
-    if (frame) {
-        memcpy(p_schro_params->dec_pic.data[0],
-               frame->components[0].data,
-               frame->components[0].length);
+    if(framewithpts && framewithpts->frame)
+    {
+        memcpy(p_schro_params->dec_frame.data[0],
+               framewithpts->frame->components[0].data,
+               framewithpts->frame->components[0].length);
 
-        memcpy(p_schro_params->dec_pic.data[1],
-               frame->components[1].data,
-               frame->components[1].length);
+        memcpy(p_schro_params->dec_frame.data[1],
+               framewithpts->frame->components[1].data,
+               framewithpts->frame->components[1].length);
 
-        memcpy(p_schro_params->dec_pic.data[2],
-               frame->components[2].data,
-               frame->components[2].length);
+        memcpy(p_schro_params->dec_frame.data[2],
+               framewithpts->frame->components[2].data,
+               framewithpts->frame->components[2].length);
 
         /* Fill picture with current buffer data from Schroedinger. */
-        avpicture_fill(picture, p_schro_params->dec_pic.data[0],
-                       avccontext->pix_fmt,
-                       avccontext->width, avccontext->height);
+        p_schro_params->dec_frame.format  = -1; /* Unknown -1 */
+        p_schro_params->dec_frame.width   = framewithpts->frame->width;
+        p_schro_params->dec_frame.height  = framewithpts->frame->height;
+        p_schro_params->dec_frame.pkt_pts = framewithpts->pts;
+        p_schro_params->dec_frame.linesize[0] = framewithpts->frame->components[0].stride;
+        p_schro_params->dec_frame.linesize[1] = framewithpts->frame->components[1].stride;
+        p_schro_params->dec_frame.linesize[2] = framewithpts->frame->components[2].stride;
 
-        *data_size = sizeof(AVPicture);
+        *(AVFrame*)data = p_schro_params->dec_frame;
+        *data_size      = sizeof(AVFrame);
 
         /* Now free the frame resources. */
         libschroedinger_decode_frame_free(frame);
+        av_free(framewithpts);
+    }
+    else
+    {
+        data = NULL;
+        *data_size = 0;
     }
     return buf_size;
 }
@@ -319,7 +358,7 @@ static av_cold int libschroedinger_decode_close(AVCodecContext *avccontext)
     schro_decoder_free(p_schro_params->decoder);
     av_freep(&p_schro_params->format);
 
-    avpicture_free(&p_schro_params->dec_pic);
+    avccontext->release_buffer(avccontext,&p_schro_params->dec_frame);
 
     /* Free data in the output frame queue. */
     ff_dirac_schro_queue_free(&p_schro_params->dec_frame_queue,
