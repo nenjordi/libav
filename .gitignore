@@ -18,6 +18,7 @@
 /avplay
 /avprobe
 /avserver
+/avserv
 /config.*
 /version.h
 /doc/*.1
