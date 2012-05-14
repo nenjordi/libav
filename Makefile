@@ -57,6 +57,7 @@ PROGS-$(CONFIG_AVCONV)   += avconv
 PROGS-$(CONFIG_AVPLAY)   += avplay
 PROGS-$(CONFIG_AVPROBE)  += avprobe
 PROGS-$(CONFIG_AVSERVER) += avserver
+PROGS-$(CONFIG_AVSERV)   += avserv
 
 PROGS      := $(PROGS-yes:%=%$(EXESUF))
 OBJS        = cmdutils.o
@@ -66,7 +67,7 @@ HOSTPROGS  := $(TESTTOOLS:%=tests/%) doc/print_options
 TOOLS       = qt-faststart trasher
 TOOLS-$(CONFIG_ZLIB) += cws2fws
 
-BASENAMES   = avconv avplay avprobe avserver
+BASENAMES   = avconv avplay avprobe avserver avserv
 ALLPROGS    = $(BASENAMES:%=%$(EXESUF))
 ALLMANPAGES = $(BASENAMES:%=%.1)
 
