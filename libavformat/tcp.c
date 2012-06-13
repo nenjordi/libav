@@ -30,6 +30,9 @@
 
 typedef struct TCPContext {
     int fd;
+    int accept_flag;
+    int *serversocks;
+    int nb_serversocks;
 } TCPContext;
 
 /* return non zero if error */
@@ -46,6 +49,7 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
     int timeout = 100, listen_timeout = -1;
     char hostname[1024],proto[1024],path[1024];
     char portstr[10];
+    int sockidx = 0;
 
     av_url_split(proto, sizeof(proto), NULL, 0, hostname, sizeof(hostname),
         &port, path, sizeof(path), uri);
@@ -65,6 +69,10 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
         if (av_find_info_tag(buf, sizeof(buf), "listen_timeout", p)) {
             listen_timeout = strtol(buf, NULL, 10);
         }
+        if (av_find_info_tag(buf, sizeof(buf), "accept", p)) {
+            listen_socket  = 1;
+            s->accept_flag = 1;
+        }
     }
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
@@ -82,6 +90,54 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
         return AVERROR(EIO);
     }
 
+    if (s->accept_flag) {
+        int reuse;
+        s->nb_serversocks = 0;
+        cur_ai = ai;
+        do {
+            s->nb_serversocks++;
+            cur_ai = cur_ai->ai_next;
+        } while (cur_ai);
+        if (!s->nb_serversocks)
+            return AVERROR(EIO);
+        s->serversocks = av_malloc(sizeof(int) * s->nb_serversocks);
+        if (!s->serversocks)
+            return AVERROR(ENOMEM);
+        // Calculate number of addresses and initialize one socket per address
+        cur_ai  = ai;
+        sockidx = 0;
+        do {
+            fd = socket(cur_ai->ai_family, cur_ai->ai_socktype,
+                        cur_ai->ai_protocol);
+            if (fd < 0)
+                goto check_next_acceptable;
+            setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+            ret = bind(fd, cur_ai->ai_addr, cur_ai->ai_addrlen);
+            if (ret) {
+                ret = ff_neterrno();
+                goto failacceptable;
+            }
+            ret = listen(fd, 1);
+            if (ret) {
+                ret = ff_neterrno();
+                goto failacceptable;
+            }
+            s->serversocks[sockidx] = fd;
+            sockidx++;
+        check_next_acceptable:
+            cur_ai = cur_ai->ai_next;
+        } while (cur_ai);
+        freeaddrinfo(ai);
+        return 0;
+    failacceptable:
+        av_log(s, AV_LOG_ERROR, "Open Acceptable tcp socket failed");
+        for (sockidx = 0; sockidx < s->nb_serversocks; sockidx++) {
+            close(s->serversocks[sockidx]);
+        }
+        av_free(s->serversocks);
+        freeaddrinfo(ai);
+        return ret;
+    }
     cur_ai = ai;
 
  restart:
@@ -186,6 +242,58 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
     return ret;
 }
 
+static int tcp_accept(URLContext *srvctx, URLContext **clctx, int timeout)
+{
+    TCPContext *atcpctx = srvctx->priv_data;
+    TCPContext *s;
+    int serversock;
+    int serversockidx = 0;
+    int fd;
+    int ret;
+    struct pollfd *pollst = NULL;
+    if (!atcpctx->accept_flag) {
+        av_log(srvctx, AV_LOG_ERROR, "Usage of tcp_accept() without having"
+               " set accept flag\n");
+        return AVERROR(ENOSYS);
+    }
+
+    pollst = av_malloc(sizeof(struct pollfd *)
+                       * atcpctx->nb_serversocks);
+     for (serversockidx = 0; serversockidx < atcpctx->nb_serversocks;
+          serversockidx++) {
+         pollst[serversockidx].fd =
+             atcpctx->serversocks[serversockidx];
+         pollst[serversockidx].events = POLLIN | POLLPRI;
+     }
+
+     if (poll(pollst, atcpctx->nb_serversocks, timeout)) {
+         int pollidx = 0;
+         for (; pollidx < atcpctx->nb_serversocks; pollidx++) {
+             if (pollst[pollidx].revents & (POLLIN | POLLPRI)) {
+                 serversock     = pollst[pollidx].fd;
+                 fd             = accept(serversock, NULL, NULL);
+                 if (fd < 0) {
+                     ret = fd;
+                     goto accept_error;
+                 }
+                 ret = ffurl_alloc(clctx, srvctx->filename, 0, NULL);
+                 if (ret)
+                     goto accept_error;
+                 s = (*clctx)->priv_data;
+                 s->fd                 = fd;
+                 (*clctx)->is_streamed = 1;
+                 (*clctx)->flags       = srvctx->flags;
+                 av_free(pollst);
+                 return 0;
+             }
+         }
+     }
+accept_error:
+     av_free(pollst);
+     av_log(atcpctx, AV_LOG_ERROR, "Unable to Accept\n");
+     return AVERROR(ret);
+}
+
 static int tcp_read(URLContext *h, uint8_t *buf, int size)
 {
     TCPContext *s = h->priv_data;
@@ -234,6 +342,7 @@ static int tcp_close(URLContext *h)
 {
     TCPContext *s = h->priv_data;
     closesocket(s->fd);
+    av_free(s->serversocks);
     return 0;
 }
 
@@ -251,6 +360,7 @@ URLProtocol ff_tcp_protocol = {
     .url_close           = tcp_close,
     .url_get_file_handle = tcp_get_file_handle,
     .url_shutdown        = tcp_shutdown,
+    .url_accept          = tcp_accept,
     .priv_data_size      = sizeof(TCPContext),
     .flags               = URL_PROTOCOL_FLAG_NETWORK,
 };
