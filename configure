@@ -1640,7 +1640,7 @@ avplay_select="rdft"
 avprobe_deps="avcodec avformat"
 avserver_deps="avformat ffm_muxer fork rtp_protocol rtsp_demuxer !shared"
 avserver_extralibs='$ldl'
-avserv_deps="avutil"
+avserv_deps="avutil avformat rtmp_protocol"
 avserv_extralibs='$ldl'
 
 doc_deps="texi2html"
