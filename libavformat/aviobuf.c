@@ -754,6 +754,35 @@ int avio_open2(AVIOContext **s, const char *filename, int flags,
     return 0;
 }
 
+int avio_accept(AVIOContext *srvavio, AVIOContext **clntavio, int timeout) {
+    URLContext *srvctx = srvavio->opaque;
+    URLContext *clientctx = NULL;
+    int ret;
+    if (!srvctx) {
+        av_log(srvavio, AV_LOG_ERROR, "avio_accept. No allocated context\n");
+        return AVERROR_BUG;
+    }
+    if (!srvctx->prot->url_accept) {
+        av_log(srvavio, AV_LOG_ERROR, "Protocol %s does not support accept\n",
+            srvctx->prot->name);
+        return AVERROR_BUG;
+    }
+    if (ret = srvctx->prot->url_accept(srvctx, &clientctx,
+                                    timeout)) {
+        av_log(srvavio, AV_LOG_ERROR, "Error on Accept\n");
+        return ret;
+    }
+    if (!clientctx) // url_accept timed out
+        return 0;
+    if (ret = ffio_fdopen(clntavio, clientctx)) {
+        av_log(srvavio, AV_LOG_ERROR, "Unable to open accept client"
+               " context\n");
+        return ret;
+    }
+
+    return 0;
+}
+
 int avio_close(AVIOContext *s)
 {
     URLContext *h;
