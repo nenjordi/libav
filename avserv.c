@@ -13,6 +13,7 @@
 #include "libavutil/random_seed.h"
 #include "libavformat/rtmp.h"
 #include "libavformat/rtmppkt.h"
+#include "libavformat/rtsp.h"
 #include "libavformat/url.h"
 #define DEBUG
 const char program_name[] = "avserv";
@@ -65,7 +66,6 @@ struct rtmp_info {
 };
 
 struct avserv_thread_params {
-    //int socket;
     URLContext *clientctx;
     struct pollfd pollst;
     struct rtmp_info rtmpctx;
@@ -80,179 +80,30 @@ struct client_context {
     struct client_context* next;
 } *clients;
 
-enum rtmp_handshake_states {
-    RTMP_UNINITIALIZED_HS,
-    RTMP_VERSIONSENT_HS,
-    RTMP_ACKSENT_HS
-};
-
-static int rtmp_handshake(struct avserv_thread_params *param)
-{
-    uint8_t buffer[RTMP_HANDSHAKE_PACKET_SIZE];
-    int eventnum      = 0;
-//    uint32_t epoch;
-//    uint32_t my_epoch;
-    uint32_t temp;
-//    uint8_t peer_random[RTMP_HANDSHAKE_PACKET_SIZE - 8];
-//    uint8_t my_random[RTMP_HANDSHAKE_PACKET_SIZE - 8];
-    enum rtmp_handshake_states handshake_state = RTMP_UNINITIALIZED_HS;
-    int randomidx = 0;
-    uint8_t error  = 0;
-    ssize_t inoutsize = 0;
-    int fd = ffurl_get_file_handle(param->clientctx);
-    FILE *debugdump = fopen("debug", "wb");
-
-    param->pollst.fd     = fd;
-    param->pollst.events = POLLIN | POLLPRI;
-    while ((eventnum = poll(&param->pollst, 1, -1)) > 0 && !error) {
-        av_log(NULL, AV_LOG_DEBUG, "Event[%d] %d\n", eventnum,
-               param->pollst.revents);
-        if ((param->pollst.revents & POLLIN) ||
-            (param->pollst.revents & POLLPRI)) {
-            switch(handshake_state) {
-            case RTMP_UNINITIALIZED_HS:
-                inoutsize = read(fd, buffer, 1); // Receive C0
-                if (inoutsize == 0) return AVERROR(EPROTO);
-                if (buffer[0] == 3) /* Check Version */
-                    if (!write(fd, buffer, 1))       // Send S0
-                    {
-                        av_log(NULL, AV_LOG_ERROR,
-                               "Unable to write answer - RTMP S0\n");
-                        return AVERROR(EPROTO);
-                    }
-                handshake_state = RTMP_VERSIONSENT_HS;
-                break;
-            case RTMP_VERSIONSENT_HS:
-                inoutsize = read(fd, buffer, 4096);
-                if (inoutsize == 0) return AVERROR(EPROTO);
-                if (inoutsize != RTMP_HANDSHAKE_PACKET_SIZE)
-                {
-                    av_log(NULL, AV_LOG_ERROR, "Erroneous C1 Message size %d"
-                           " not following standard\n", (int)inoutsize);
-                    return AVERROR(EPROTO);
-                }
-                av_hex_dump(debugdump, buffer, RTMP_HANDSHAKE_PACKET_SIZE);
-                memcpy(&temp, buffer, 4);
-                param->rtmpctx.epoch = ntohl(temp);
-                param->rtmpctx.my_epoch = param->rtmpctx.epoch;
-                memcpy(&temp, buffer + 4, 4);
-                temp  = ntohl(temp);
-                if (temp != 0) {
-                    av_log(NULL, AV_LOG_WARNING,
-                           "Erroneous C1 Message zero != 0 --> %d\n", temp);
-                }
-                memcpy(param->rtmpctx.peer_random, buffer + 8,
-                       RTMP_HANDSHAKE_PACKET_SIZE - 8);
-                // Send answer
-                /* By now same epoch will be send */
-                for (randomidx = 0;
-                     randomidx < (RTMP_HANDSHAKE_PACKET_SIZE - 8);
-                     randomidx += 4) {
-                    temp = av_get_random_seed();
-                    memcpy(param->rtmpctx.my_random + randomidx, &temp, 4);
-                }
-                memcpy(buffer + 8, param->rtmpctx.my_random,
-                       RTMP_HANDSHAKE_PACKET_SIZE - 8);
-                inoutsize = write(fd, buffer, RTMP_HANDSHAKE_PACKET_SIZE);
-                if (inoutsize != RTMP_HANDSHAKE_PACKET_SIZE) {
-                    av_log(NULL, AV_LOG_ERROR,
-                           "Unable to write answer - RTMP S1\n");
-                    return AVERROR(EPROTO);
-                }
-                handshake_state = RTMP_ACKSENT_HS;
-                break;
-            case RTMP_ACKSENT_HS:
-                inoutsize = read(fd,buffer,4096);
-                if (inoutsize == 0) return AVERROR(EPROTO);
-                if (inoutsize != RTMP_HANDSHAKE_PACKET_SIZE)
-                {
-                    av_log(NULL, AV_LOG_ERROR, "Erroneous C2 Message size %d"
-                           " not following standard\n", (int)inoutsize);
-                    return AVERROR(EPROTO);
-                }
-                memcpy(&temp, buffer, 4);
-                temp = ntohl(temp);
-                if (temp != param->rtmpctx.my_epoch)
-                {
-                    av_log(NULL, AV_LOG_ERROR, "Erroneous C2 Message epoch"
-                           " does not match up with C1 epoch\n");
-                    return AVERROR(EPROTO);
-                }
-
-                /* TODO: Should Time2 be used to synchronise timers? */
-                if (memcmp(buffer + 8, param->rtmpctx.my_random,
-                           RTMP_HANDSHAKE_PACKET_SIZE - 8) != 0)
-                {
-                    av_log(NULL, AV_LOG_ERROR, "Erroneous C2 Message random"
-                           " does not match up\n");
-                    return AVERROR(EPROTO);
-                }
-                /* Send S2 */
-                temp = htonl(param->rtmpctx.epoch);
-                memcpy(buffer, &temp , 4);
-                // TODO: Time2 missing, by now 0
-                temp = 0;
-                memcpy(buffer + 4, &temp, 4);
-                memcpy(buffer + 8, param->rtmpctx.peer_random,
-                       RTMP_HANDSHAKE_PACKET_SIZE - 8);
-                inoutsize = write(fd, buffer,
-                                  RTMP_HANDSHAKE_PACKET_SIZE);
-                if (inoutsize != RTMP_HANDSHAKE_PACKET_SIZE) {
-                    av_log(NULL, AV_LOG_ERROR,
-                           "Unable to write answer - RTMP S2\n");
-                    return AVERROR(EPROTO);
-                }
-
-                /* Handshake successful */
-                return 0;
-                break;
-            }
-        }
-    }
-    return error;
-
-}
-
-
 static void *avserv_thread(void *arg)
 {
     struct avserv_thread_params *param = arg;
     int ret = 0;
+    char c; // ERASEME
     int eventnum;
     int fd = ffurl_get_file_handle(param->clientctx);
-
     av_log(NULL, AV_LOG_INFO, "Thread starts\n");
-    ret = rtmp_handshake(param);
-    if (ret != 0)
-        av_log(NULL, AV_LOG_ERROR, "Problem with RTMP handshake\n");
-    while ((eventnum = poll(&param->pollst, 1, -1)) > 0) {
-        av_log(NULL, AV_LOG_DEBUG, "Event[%d] %d\n", eventnum,
-               param->pollst.revents);
-        if ((param->pollst.revents & POLLIN)
-            || (param->pollst.revents & POLLPRI)) {
-            RTMPPacket new = {0};
-            RTMPPacket prev_packet = {0};
-            //inoutsize = read(fd, rbuf, 4096);
-            //    if (inoutsize == 0) return AVERROR(EPROTO);
-            ret = ff_rtmp_packet_read(param->clientctx, &new, 4096, &prev_packet);
-            av_log(param->clientctx, AV_LOG_DEBUG, "Received rtmp message %db\n", ret);
-            if (ret <= 0)
-                break;
-            ff_rtmp_packet_dump(param->clientctx, &new);
-            ff_rtmp_packet_destroy(&new);
-        }
+    for (ret=0; ret < 10; ret++) {
+        ffurl_read_complete(param->clientctx, &c, 1);
+        av_log(NULL, AV_LOG_INFO, "Received %c\n", c);
     }
-    close(fd);
     av_log(NULL, AV_LOG_INFO, "Thread ends\n");
+    ffurl_close(param->clientctx);
     pthread_exit(0);
     return NULL;
 }
 
 int main(int argc, char *argv[])
 {
+    int ret;
     char tcpname[500];
-    //AVFormatContext *fmtctx = avformat_alloc_context();
-    URLContext *serverctx;
+    AVFormatContext fmtctx = { 0};
+    // URLContext *serverctx  = NULL;
 
     //TODO: ADD pthread_t monitor -- Is it really needed?
     /* Argument parsing */
@@ -279,13 +130,12 @@ int main(int argc, char *argv[])
     ff_url_join(tcpname, sizeof(tcpname), "tcp", NULL, "localhost",
                 RTMP_DEFAULT_PORT, "?accept");
     av_log(NULL, AV_LOG_INFO, "Opening: %s\n", tcpname);
-    if (ffurl_open(&serverctx, tcpname, AVIO_FLAG_READ_WRITE,
-                   NULL, NULL)) //Warning, no IO interrupt callback set,needed?
-    {
+    if (avio_open(&fmtctx.pb, tcpname, AVIO_FLAG_READ_WRITE)) {
         av_log(NULL, AV_LOG_ERROR, "Unable to open TCP for listening\n");
         return AVERROR(EIO);
     }
     for (;;) {
+        AVFormatContext client = { 0 };
         pthread_t avservth;
         pthread_attr_t avservth_attr;
         struct avserv_thread_params *avservth_params = {0};
@@ -296,9 +146,15 @@ int main(int argc, char *argv[])
         }
 
         av_log(NULL, AV_LOG_INFO, "Accept\n");
-        if (serverctx->prot->url_accept(serverctx, &avservth_params->clientctx,
+        /* if (serverctx->prot->url_accept(serverctx, &avservth_params->clientctx,
                                         -1))
             av_log(NULL, AV_LOG_ERROR, "Error on Accept\n");
+        */
+        if (ret = avio_accept(fmtctx.pb, &client.pb)) {
+            av_log(NULL, AV_LOG_ERROR, "Error in avio_accept\n");
+            return ret;
+        }
+        avservth_params->clientctx = client.pb->opaque;
         num_clients++;
         clients = av_realloc(clients, sizeof(struct client_context)
                              * num_clients);
