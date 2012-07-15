@@ -604,7 +604,7 @@ int ff_rtsp_setup_input_streams(AVFormatContext *s, RTSPMessageHeader *reply)
 static int rtsp_listen(AVFormatContext *s)
 {
     RTSPState *rt = s->priv_data;
-    char host[128], path[512], auth[128];
+    char proto[256], host[128], path[512], auth[128];
     char uri[500];
     int port;
     char tcpname[500];
@@ -615,8 +615,10 @@ static int rtsp_listen(AVFormatContext *s)
     enum RTSPMethod methodcode;
 
     /* extract hostname and port */
-    av_url_split(NULL, 0, auth, sizeof(auth), host, sizeof(host), &port,
-                 path, sizeof(path), s->filename);
+    av_url_split(proto, sizeof(proto), auth, sizeof(auth), host, sizeof(host),
+                 &port, path, sizeof(path), s->filename);
+    if (strcmp(proto, "rtsp") || port <= 0 || port >= 65536)
+        return AVERROR(EINVAL);
 
     /* ff_url_join. No authorization by now (NULL) */
     ff_url_join(rt->control_uri, sizeof(rt->control_uri), "rtsp", NULL, host,
