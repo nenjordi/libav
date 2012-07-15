@@ -346,6 +346,17 @@ int avio_open2(AVIOContext **s, const char *url, int flags,
                const AVIOInterruptCB *int_cb, AVDictionary **options);
 
 /**
+ * Accept an incoming connection and create a new AVIOContext to use the new
+ * connection.
+ *
+ * @param  s Initialized context capable of receiving new connections
+ * @param  c Used to return the pointer to the created AVIOContext
+ * @return 0 in case of success, a negative value corresponding to an
+ *           AVERROR code in case of failure
+ */
+int avio_accept(AVIOContext *s, AVIOContext **c, int timeout);
+
+/**
  * Close the resource accessed by the AVIOContext s and free it.
  * This function can only be used if s was opened by avio_open().
  *
