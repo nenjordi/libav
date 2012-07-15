@@ -28,7 +28,7 @@ struct avserv_options {
     char *config_filename;
     in_port_t port;
     uint8_t debug;
-} avserv_options = {0};
+} avserv_options = { 0 };
 
 void exit_program(int ret)
 {
@@ -103,9 +103,8 @@ int main(int argc, char *argv[])
     int ret;
     char tcpname[500];
     AVFormatContext fmtctx = { 0};
-    // URLContext *serverctx  = NULL;
 
-    //TODO: ADD pthread_t monitor -- Is it really needed?
+    // TODO: ADD pthread_t monitor -- Is it really needed?
     /* Argument parsing */
     parse_options(NULL, argc, argv, options, NULL);
 
@@ -138,7 +137,7 @@ int main(int argc, char *argv[])
         AVFormatContext client = { 0 };
         pthread_t avservth;
         pthread_attr_t avservth_attr;
-        struct avserv_thread_params *avservth_params = {0};
+        struct avserv_thread_params *avservth_params = { 0 };
         avservth_params = av_malloc(sizeof(struct avserv_thread_params));
         if (!avservth_params) {
             av_log(NULL, AV_LOG_ERROR, "Unable to allocate thread params "
@@ -146,10 +145,6 @@ int main(int argc, char *argv[])
         }
 
         av_log(NULL, AV_LOG_INFO, "Accept\n");
-        /* if (serverctx->prot->url_accept(serverctx, &avservth_params->clientctx,
-                                        -1))
-            av_log(NULL, AV_LOG_ERROR, "Error on Accept\n");
-        */
         if (ret = avio_accept(fmtctx.pb, &client.pb)) {
             av_log(NULL, AV_LOG_ERROR, "Error in avio_accept\n");
             return ret;
@@ -162,7 +157,8 @@ int main(int argc, char *argv[])
         if (pthread_attr_init(&avservth_attr))
             av_log(NULL, AV_LOG_ERROR, "Unable to init"
                    " thread attributes\n");
-        if(pthread_create(&avservth , &avservth_attr, avserv_thread, avservth_params))
+        if (pthread_create(&avservth , &avservth_attr, avserv_thread,
+                          avservth_params))
             av_log(NULL, AV_LOG_ERROR, "Unable to create listen thread\n");
         pthread_detach(avservth); /* Detach thread */
     }
