@@ -22,6 +22,7 @@
 #include "libavutil/avstring.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mathematics.h"
+#include "libavutil/parseutils.h"
 #include "libavutil/random_seed.h"
 #include "libavutil/time.h"
 #include "avformat.h"
@@ -610,8 +611,11 @@ static int rtsp_listen(AVFormatContext *s)
     char tcpname[500];
     unsigned char rbuf[4096];
     unsigned char method[10];
+    char tag[255];
     int rbuflen = 0;
     int ret;
+    int accept_flag = 0;
+    const char *p;
     enum RTSPMethod methodcode;
 
     /* extract hostname and port */
@@ -620,20 +624,36 @@ static int rtsp_listen(AVFormatContext *s)
     if (strcmp(proto, "rtsp") || port <= 0 || port >= 65536)
         return AVERROR(EINVAL);
 
+    p = strchr(s->filename, '?');
+    if (p) {
+        if (av_find_info_tag(tag, sizeof(tag), "listen", p)) {
+            // ignore
+        }
+        if (av_find_info_tag(tag, sizeof(tag), "accept", p)) {
+            av_log(s, AV_LOG_DEBUG, "Accept option found for RTSP\n");
+            accept_flag = 1;
+        }
+    }
+
     /* ff_url_join. No authorization by now (NULL) */
     ff_url_join(rt->control_uri, sizeof(rt->control_uri), "rtsp", NULL, host,
                 port, "%s", path);
-    /* Create TCP connection */
-    ff_url_join(tcpname, sizeof(tcpname), "tcp", NULL, host, port,
-                "?listen&listen_timeout=%d", rt->initial_timeout * 1000);
+    if (!accept_flag) {
+        /* Create TCP connection */
+        ff_url_join(tcpname, sizeof(tcpname), "tcp", NULL, host, port,
+                    "?listen&listen_timeout=%d", rt->initial_timeout * 1000);
 
-    if (ret = ffurl_open(&rt->rtsp_hd, tcpname, AVIO_FLAG_READ_WRITE,
-                         &s->interrupt_callback, NULL)) {
-        av_log(s, AV_LOG_ERROR, "Unable to open RTSP for listening\n");
-        return ret;
+        if (ret = ffurl_open(&rt->rtsp_hd, tcpname, AVIO_FLAG_READ_WRITE,
+                             &s->interrupt_callback, NULL)) {
+            av_log(s, AV_LOG_ERROR, "Unable to open RTSP for listening\n");
+            return ret;
+        }
+        rt->rtsp_hd_out = rt->rtsp_hd;
+    } else {
+        rt->rtsp_hd     = s->pb->opaque;
+        rt->rtsp_hd_out = s->pb->opaque;
     }
     rt->state       = RTSP_STATE_IDLE;
-    rt->rtsp_hd_out = rt->rtsp_hd;
     for (;;) { /* Wait for incoming RTSP messages */
         ret = read_line(s, rbuf, sizeof(rbuf), &rbuflen);
         if (ret < 0)
