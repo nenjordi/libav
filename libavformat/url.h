@@ -86,6 +86,8 @@ typedef struct URLProtocol {
     const AVClass *priv_data_class;
     int flags;
     int (*url_check)(URLContext *h, int mask);
+    int (*url_listen)(URLContext *srvctx, const char *uri, int flags,
+                      int timeout);
     int (*url_accept)(URLContext *srvctx, URLContext **clctx, int timeout);
 } URLProtocol;
 

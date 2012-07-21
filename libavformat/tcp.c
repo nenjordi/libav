@@ -28,6 +28,8 @@
 #include <poll.h>
 #endif
 
+#define MAX_TCP_INCOMING_CONNECTION_QUEUE_SIZE 10
+
 typedef struct TCPContext {
     int fd;
     int accept_flag;
@@ -117,17 +119,13 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
                 ret = ff_neterrno();
                 goto failacceptable;
             }
-            ret = listen(fd, 1);
-            if (ret) {
-                ret = ff_neterrno();
-                goto failacceptable;
-            }
             s->serversocks[sockidx] = fd;
             sockidx++;
         check_next_acceptable:
             cur_ai = cur_ai->ai_next;
         } while (cur_ai);
         freeaddrinfo(ai);
+        s->nb_serversocks = sockidx; // Number of binded connections
         return 0;
     failacceptable:
         av_log(s, AV_LOG_ERROR, "Open Acceptable tcp socket failed");
@@ -174,6 +172,8 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
         closesocket(fd);
         fd = fd1;
         ff_socket_nonblock(fd, 1);
+        s->fd = fd;
+        return 0;
     } else {
  redo:
         ff_socket_nonblock(fd, 1);
@@ -239,6 +239,101 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
     if (fd >= 0)
         closesocket(fd);
     freeaddrinfo(ai);
+    return ret;
+}
+
+static int tcp_listen(URLContext *srvctx, const char *uri, int flags)
+{
+    TCPContext *s      = srvctx->priv_data;
+    int ret            = AVERROR_BUG;
+    int listen_timeout = -1;
+    int listen_socket  = 0;
+    char hostname[1024], proto[1024], path[1024];
+    const char *p;
+    char buf[256];
+    int port;
+    av_url_split(proto, sizeof(proto), NULL, 0, hostname, sizeof(hostname),
+        &port, path, sizeof(path), uri);
+    if (strcmp(proto, "tcp") || port <= 0 || port >= 65536)
+        return AVERROR(EINVAL);
+
+    p = strchr(uri, '?');
+    if (p) {
+        if (av_find_info_tag(buf, sizeof(buf), "listen", p))
+            listen_socket = 1;
+        if (av_find_info_tag(buf, sizeof(buf), "listen_timeout", p)) {
+            listen_timeout = strtol(buf, NULL, 10);
+        }
+        if (av_find_info_tag(buf, sizeof(buf), "accept", p)) {
+            listen_socket  = 1;
+            s->accept_flag = 1;
+        }
+    }
+    if (s->accept_flag) {
+        int sockidx = 0;
+        int ret;
+        if (!s->nb_serversocks) {
+            // Auto call tcp_open
+            tcp_open(srvctx, uri, flags);
+        }
+        for (;sockidx < s->nb_serversocks; sockidx++) {
+            if (!s->serversocks[sockidx]) {
+                av_log(s, AV_LOG_ERROR, "Invalid socket to listen\n");
+                return AVERROR(ENOTSOCK);
+            }
+            ret = listen(s->serversocks[sockidx],
+                         MAX_TCP_INCOMING_CONNECTION_QUEUE_SIZE);
+            if (ret)
+                goto listenerror;
+        }
+    } else if (listen_socket) {
+        int reuse = 1;
+        int fd    = 0;
+        struct pollfd lp = { fd, POLLIN, 0 };
+        struct addrinfo hints = { 0 }, *ai, *cur_ai;
+        char portstr[10];
+
+
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_socktype = SOCK_STREAM;
+        snprintf(portstr, sizeof(portstr), "%d", port);
+        hints.ai_flags |= AI_PASSIVE;
+        if (!hostname[0])
+            ret = getaddrinfo(NULL, portstr, &hints, &ai);
+        else
+            ret = getaddrinfo(hostname, portstr, &hints, &ai);
+
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+        cur_ai = ai;
+    retry:
+        ret = bind(fd, cur_ai->ai_addr, cur_ai->ai_addrlen);
+        if (ret) {
+            ret = ff_neterrno();
+            goto listen1error;
+        }
+        ret = listen(fd, 1);
+        if (ret) {
+            ret = ff_neterrno();
+            goto listen1error;
+        }
+        ret = poll(&lp, 1, listen_timeout >= 0 ? listen_timeout : -1);
+        if (ret <= 0) {
+            ret = AVERROR(ETIMEDOUT);
+            goto listen1error;
+        }
+        s->fd = fd;
+        return 0;
+    listen1error:
+        if (cur_ai->ai_next) {
+            cur_ai = cur_ai->ai_next;
+            goto retry;
+        }
+        goto listenerror;
+    }
+    return 0;
+listenerror:
+    if (s->fd >= 0)
+        closesocket(s->fd);
     return ret;
 }
 
@@ -361,6 +456,7 @@ URLProtocol ff_tcp_protocol = {
     .url_get_file_handle = tcp_get_file_handle,
     .url_shutdown        = tcp_shutdown,
     .url_accept          = tcp_accept,
+    .url_listen          = tcp_listen,
     .priv_data_size      = sizeof(TCPContext),
     .flags               = URL_PROTOCOL_FLAG_NETWORK,
 };
