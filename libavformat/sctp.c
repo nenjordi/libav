@@ -151,6 +151,10 @@ typedef struct SCTPContext {
     int max_streams;
     struct sockaddr_storage dest_addr;
     socklen_t dest_addr_len;
+    int accept_flag;
+    int listen_socket;
+    int *serversocks;
+    int nb_serversocks;
 } SCTPContext;
 
 static int sctp_open(URLContext *h, const char *uri, int flags)
@@ -248,6 +252,132 @@ fail:
     return ret;
 }
 
+static int sctp_listen(URLContext *h, const char *uri, int flags)
+{
+    struct addrinfo *ai, *cur_ai;
+    struct addrinfo hints             = { 0 };
+    int port;
+    int fd         = -1;
+    SCTPContext *s = h->priv_data;
+    const char *p;
+    char buf[256];
+    int ret = 0;
+    char hostname[1024], proto[1024], path[1024];
+    char portstr[10];
+
+    av_url_split(proto, sizeof(proto), NULL, 0, hostname, sizeof(hostname),
+                 &port, path, sizeof(path), uri);
+    if (strcmp(proto, "sctp") || port <= 0 || port >= 65536)
+        return AVERROR(EINVAL);
+
+    s->max_streams = 0;
+    p = strchr(uri, '?');
+    if (p) {
+        if (av_find_info_tag(buf, sizeof(buf), "listen", p))
+            s->listen_socket = 1;
+        if (av_find_info_tag(buf, sizeof(buf), "max_streams", p))
+            s->max_streams = strtol(buf, NULL, 10);
+        if (av_find_info_tag(buf, sizeof(buf), "accept", p))
+            s->accept_flag = 1;
+    }
+
+    hints.ai_family   = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    snprintf(portstr, sizeof(portstr), "%d", port);
+    ret = getaddrinfo(hostname, portstr, &hints, &ai);
+    if (ret) {
+        av_log(h, AV_LOG_ERROR, "Failed to resolve hostname %s: %s\n",
+               hostname, gai_strerror(ret));
+        return AVERROR(EIO);
+    }
+
+    cur_ai = ai;
+    s->nb_serversocks = 0;
+    do {
+        fd = socket(cur_ai->ai_family, SOCK_STREAM, IPPROTO_SCTP);
+        if (fd < 0)
+            goto listenfail;
+        s->dest_addr_len = sizeof(s->dest_addr);
+        ret = bind(fd, cur_ai->ai_addr, cur_ai->ai_addrlen);
+        if (s->listen_socket) {
+            s->fd = fd;
+            return 0;
+        } else {
+            s->serversocks[s->nb_serversocks] = fd;
+            s->nb_serversocks++;
+        }
+        cur_ai = cur_ai->ai_next;
+    } while (cur_ai);
+    return 0;
+listenfail:
+    ret = AVERROR(EIO);
+    freeaddrinfo(ai);
+    return ret;
+
+}
+
+static int sctp_accept(URLContext *s, URLContext **c, int timeout)
+{
+    SCTPContext *sctx     = s->priv_data;
+    SCTPContext *client   = NULL;
+    struct pollfd *pollst = NULL;
+    int serversockidx     = 0;
+    int ret               = 0;
+    int tout              = timeout;
+    int serversock;
+    int fd;
+
+    if (!sctx->nb_serversocks) {
+        av_log(s, AV_LOG_ERROR, "Usage of sctp_accept() without calling"
+               " sctp_listen\n");
+        return AVERROR(ENOSYS);
+    }
+
+    if (s->flags & AVIO_FLAG_NONBLOCK)
+        tout = 0;
+
+    pollst = av_malloc(sizeof(struct pollfd *)
+                       * sctx->nb_serversocks);
+    for (serversockidx = 0; serversockidx < sctx->nb_serversocks;
+         serversockidx++) {
+        pollst[serversockidx].fd =
+            sctx->serversocks[serversockidx];
+        pollst[serversockidx].events = POLLIN | POLLPRI;
+    }
+
+    if ((ret = poll(pollst, sctx->nb_serversocks, tout)) > 0) {
+         int pollidx = 0;
+         for (; pollidx < sctx->nb_serversocks; pollidx++) {
+             if (pollst[pollidx].revents & (POLLIN | POLLPRI)) {
+                 serversock = pollst[pollidx].fd;
+                 fd         = accept(serversock, NULL, NULL);
+                 if (fd < 0) {
+                     ret = fd;
+                     goto accept_error;
+                 }
+                 ret = ffurl_alloc(c, s->filename, 0, NULL);
+                 if (ret)
+                     goto accept_error;
+                 client = (*c)->priv_data;
+                 client->fd   = fd;
+                 (*c)->flags  = s->flags;
+                 av_free(pollst);
+                 return 0;
+             }
+         }
+     }
+    if (!ret) // poll timed out
+        return 0;
+accept_error:
+     av_free(pollst);
+     av_log(sctx, AV_LOG_ERROR, "Unable to Accept\n");
+     return AVERROR(ret);
+
+
+    return 0;
+}
+
+
 static int sctp_wait_fd(int fd, int write)
 {
     int ev          = write ? POLLOUT : POLLIN;
@@ -321,6 +451,8 @@ static int sctp_get_file_handle(URLContext *h)
 URLProtocol ff_sctp_protocol = {
     .name                = "sctp",
     .url_open            = sctp_open,
+    .url_listen          = sctp_listen,
+    .url_accept          = sctp_accept,
     .url_read            = sctp_read,
     .url_write           = sctp_write,
     .url_close           = sctp_close,
