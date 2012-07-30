@@ -754,6 +754,30 @@ int avio_open2(AVIOContext **s, const char *filename, int flags,
     return 0;
 }
 
+int avio_listen(AVIOContext *s, const char *url, int flags)
+{
+    URLContext *ctx = s->opaque;
+    int ret;
+
+    if (!ctx) {
+        av_log(s, AV_LOG_ERROR, "avio_listen. No allocated context\n");
+        return AVERROR_BUG;
+    }
+
+    if (!ctx->prot->url_listen) {
+        av_log(s, AV_LOG_ERROR, "Protocol %s does not support listen\n",
+               ctx->prot->name);
+        return AVERROR_BUG;
+    }
+
+    if (ret = ctx->prot->url_listen(ctx, url, flags)) {
+        av_log(s, AV_LOG_ERROR, "Error on Accept\n");
+        return ret;
+    }
+
+    return 0;
+}
+
 int avio_accept(AVIOContext *server, AVIOContext **client, int timeout)
 {
     URLContext *serverctx = server->opaque;

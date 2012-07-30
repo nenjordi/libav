@@ -346,6 +346,15 @@ int avio_open2(AVIOContext **s, const char *url, int flags,
                const AVIOInterruptCB *int_cb, AVDictionary **options);
 
 /**
+ * Listen for connections on an initialized AVIOContext.
+ *
+ * @param  s Initialized context
+ * @return 0 in case of success, a negative value corresponding to an
+ *           AVERROR code in case of failure
+ */
+int avio_listen(AVIOContext *s, const char *url, int flags);
+
+/**
  * Accept an incoming connection and create a new AVIOContext to use the new
  * connection.
  *
