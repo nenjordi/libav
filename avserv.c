@@ -130,9 +130,14 @@ int main(int argc, char *argv[])
                 RTMP_DEFAULT_PORT, "?accept");
     av_log(NULL, AV_LOG_INFO, "Opening: %s\n", tcpname);
     if (avio_open(&fmtctx.pb, tcpname, AVIO_FLAG_READ_WRITE)) {
+        av_log(NULL, AV_LOG_ERROR, "Unable to open TCP\n");
+        return AVERROR(EIO);
+    }
+    if (avio_listen(&fmtctx.pb, tcpname, AVIO_FLAG_READ_WRITE, -1)) {
         av_log(NULL, AV_LOG_ERROR, "Unable to open TCP for listening\n");
         return AVERROR(EIO);
     }
+
     for (;;) {
         AVFormatContext client = { 0 };
         pthread_t avservth;
