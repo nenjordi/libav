@@ -776,9 +776,9 @@ int avio_listen(AVIOContext **s, const char *url, int flags, int timeout)
     return 0;
 }
 
-int avio_accept(AVIOContext *srvavio, AVIOContext **clntavio) {
+int avio_accept(AVIOContext *srvavio, AVIOContext **clntavio, int timeout) {
     URLContext *srvctx = srvavio->opaque;
-    URLContext *clientctx;
+    URLContext *clientctx = NULL;
     int ret;
     if (!srvctx) {
         av_log(srvavio, AV_LOG_ERROR, "avio_accept. No allocated context\n");
@@ -790,10 +790,12 @@ int avio_accept(AVIOContext *srvavio, AVIOContext **clntavio) {
         return AVERROR_BUG;
     }
     if (ret = srvctx->prot->url_accept(srvctx, &clientctx,
-                                    -1)) {
+                                    timeout)) {
         av_log(srvavio, AV_LOG_ERROR, "Error on Accept\n");
         return ret;
     }
+    if (!clientctx) // url_accept timed out
+        return 0;
     if (ret = ffio_fdopen(clntavio, clientctx)) {
         av_log(srvavio, AV_LOG_ERROR, "Unable to open accept client"
                " context\n");

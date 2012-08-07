@@ -252,7 +252,7 @@ fail:
     return ret;
 }
 
-static int sctp_listen(URLContext *h, const char *uri, int flags)
+static int sctp_listen(URLContext *h, const char *uri, int flags, int timeout)
 {
     struct addrinfo *ai, *cur_ai;
     struct addrinfo hints             = { 0 };
@@ -340,7 +340,7 @@ static int sctp_accept(URLContext *s, URLContext **c, int timeout)
         pollst[serversockidx].events = POLLIN | POLLPRI;
     }
 
-    if (poll(pollst, sctx->nb_serversocks, timeout)) {
+    if ((ret = poll(pollst, sctx->nb_serversocks, timeout)) > 0) {
          int pollidx = 0;
          for (; pollidx < sctx->nb_serversocks; pollidx++) {
              if (pollst[pollidx].revents & (POLLIN | POLLPRI)) {
@@ -361,6 +361,8 @@ static int sctp_accept(URLContext *s, URLContext **c, int timeout)
              }
          }
      }
+    if (!ret) // poll timed out
+        return 0;
 accept_error:
      av_free(pollst);
      av_log(sctx, AV_LOG_ERROR, "Unable to Accept\n");

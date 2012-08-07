@@ -361,7 +361,7 @@ static int tcp_accept(URLContext *srvctx, URLContext **clctx, int timeout)
          pollst[serversockidx].events = POLLIN | POLLPRI;
      }
 
-     if (poll(pollst, atcpctx->nb_serversocks, timeout)) {
+     if ((ret = poll(pollst, atcpctx->nb_serversocks, timeout)) > 0) {
          int pollidx = 0;
          for (; pollidx < atcpctx->nb_serversocks; pollidx++) {
              if (pollst[pollidx].revents & (POLLIN | POLLPRI)) {
@@ -383,6 +383,8 @@ static int tcp_accept(URLContext *srvctx, URLContext **clctx, int timeout)
              }
          }
      }
+     if (!ret) // poll timed out
+         return 0;
 accept_error:
      av_free(pollst);
      av_log(atcpctx, AV_LOG_ERROR, "Unable to Accept\n");

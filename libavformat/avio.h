@@ -364,7 +364,7 @@ int avio_listen(AVIOContext **s, const char *url, int flags,
  * @return 0 in case of success, a negative value corresponding to an
  * AVERROR code in case of failure
  */
-int avio_accept(AVIOContext *s, AVIOContext **c);
+int avio_accept(AVIOContext *s, AVIOContext **c, int timeout);
 
 /**
  * Close the resource accessed by the AVIOContext s and free it.
