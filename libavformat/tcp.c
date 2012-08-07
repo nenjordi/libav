@@ -94,6 +94,7 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
 
     if (s->accept_flag) {
         int reuse;
+        int isblocking = h->flags & AVIO_FLAG_NONBLOCK;
         s->nb_serversocks = 0;
         cur_ai = ai;
         do {
@@ -109,7 +110,7 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
         cur_ai  = ai;
         sockidx = 0;
         do {
-            fd = socket(cur_ai->ai_family, cur_ai->ai_socktype,
+            fd = socket(cur_ai->ai_family, cur_ai->ai_socktype | isblocking,
                         cur_ai->ai_protocol);
             if (fd < 0)
                 goto check_next_acceptable;
@@ -128,7 +129,7 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
         s->nb_serversocks = sockidx; // Number of binded connections
         return 0;
     failacceptable:
-        av_log(s, AV_LOG_ERROR, "Open Acceptable tcp socket failed");
+        av_log(h, AV_LOG_ERROR, "Open Acceptable tcp socket failed");
         for (sockidx = 0; sockidx < s->nb_serversocks; sockidx++) {
             close(s->serversocks[sockidx]);
         }
@@ -242,7 +243,8 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
     return ret;
 }
 
-static int tcp_listen(URLContext *srvctx, const char *uri, int flags)
+static int tcp_listen(URLContext *srvctx, const char *uri, int flags,
+                      int timeout)
 {
     TCPContext *s      = srvctx->priv_data;
     int ret            = AVERROR_BUG;
@@ -343,14 +345,19 @@ static int tcp_accept(URLContext *srvctx, URLContext **clctx, int timeout)
     TCPContext *s;
     int serversock;
     int serversockidx = 0;
+    int tout          = timeout;
     int fd;
     int ret;
+
     struct pollfd *pollst = NULL;
     if (!atcpctx->accept_flag) {
         av_log(srvctx, AV_LOG_ERROR, "Usage of tcp_accept() without having"
                " set accept flag\n");
         return AVERROR(ENOSYS);
     }
+
+    if (srvctx->flags & AVIO_FLAG_NONBLOCK)
+        tout = 0;
 
     pollst = av_malloc(sizeof(struct pollfd *)
                        * atcpctx->nb_serversocks);
@@ -361,7 +368,7 @@ static int tcp_accept(URLContext *srvctx, URLContext **clctx, int timeout)
          pollst[serversockidx].events = POLLIN | POLLPRI;
      }
 
-     if ((ret = poll(pollst, atcpctx->nb_serversocks, timeout)) > 0) {
+     if ((ret = poll(pollst, atcpctx->nb_serversocks, tout)) > 0) {
          int pollidx = 0;
          for (; pollidx < atcpctx->nb_serversocks; pollidx++) {
              if (pollst[pollidx].revents & (POLLIN | POLLPRI)) {

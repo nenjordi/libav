@@ -323,6 +323,7 @@ static int sctp_accept(URLContext *s, URLContext **c, int timeout)
     struct pollfd *pollst = NULL;
     int serversockidx     = 0;
     int ret               = 0;
+    int tout              = timeout;
     int serversock;
     int fd;
 
@@ -331,6 +332,10 @@ static int sctp_accept(URLContext *s, URLContext **c, int timeout)
                " sctp_listen\n");
         return AVERROR(ENOSYS);
     }
+
+    if (s->flags & AVIO_FLAG_NONBLOCK)
+        tout = 0;
+
     pollst = av_malloc(sizeof(struct pollfd *)
                        * sctx->nb_serversocks);
     for (serversockidx = 0; serversockidx < sctx->nb_serversocks;
@@ -340,7 +345,7 @@ static int sctp_accept(URLContext *s, URLContext **c, int timeout)
         pollst[serversockidx].events = POLLIN | POLLPRI;
     }
 
-    if ((ret = poll(pollst, sctx->nb_serversocks, timeout)) > 0) {
+    if ((ret = poll(pollst, sctx->nb_serversocks, tout)) > 0) {
          int pollidx = 0;
          for (; pollidx < sctx->nb_serversocks; pollidx++) {
              if (pollst[pollidx].revents & (POLLIN | POLLPRI)) {
