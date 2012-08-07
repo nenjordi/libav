@@ -15,7 +15,9 @@
 #include "libavformat/rtmppkt.h"
 #include "libavformat/rtsp.h"
 #include "libavformat/url.h"
+
 #define DEBUG
+#define ACCEPT_TOUT 10
 const char program_name[] = "avserv";
 const int program_birth_year = 2012;
 static const OptionDef options[];
@@ -66,7 +68,7 @@ struct rtmp_info {
 };
 
 struct avserv_thread_params {
-    URLContext *clientctx;
+    AVFormatContext *clientctx;
     struct pollfd pollst;
     struct rtmp_info rtmpctx;
     struct sockaddr_in *clientaddr;
@@ -80,29 +82,69 @@ struct client_context {
     struct client_context* next;
 } *clients;
 
-static void *avserv_thread(void *arg)
+static void *rtsp_publish_avserv_thread(void *arg)
 {
     struct avserv_thread_params *param = arg;
-    int ret = 0;
-    char c; // ERASEME
-    int eventnum;
-    int fd = ffurl_get_file_handle(param->clientctx);
+    AVPacket pkt, *ppkt = &pkt;
+    RTSPState *rt = param->clientctx->priv_data;
     av_log(NULL, AV_LOG_INFO, "Thread starts\n");
-    for (ret=0; ret < 10; ret++) {
-        ffurl_read_complete(param->clientctx, &c, 1);
-        av_log(NULL, AV_LOG_INFO, "Received %c\n", c);
+    /* for (ret=0; ret < 10; ret++) { */
+    /*     ffurl_read_complete(param->clientctx, &c, 1); */
+    /*     av_log(NULL, AV_LOG_INFO, "Received %c\n", c); */
+    /* } */
+    while (rt->state != RTSP_STATE_STREAMING) {
+        // Wait some time
+        av_log(param->clientctx, AV_LOG_INFO,
+               "Wait for State Streaming in RTSP\n");
     }
+    for (;;) {
+        if (av_read_frame(param->clientctx, ppkt) < 0) {
+            av_log(param->clientctx, AV_LOG_ERROR, "Unable to read frame\n");
+            goto rtsp_read_frame_error;
+        }
+        av_log(param->clientctx, AV_LOG_INFO, "Received packet %d bytes pts %ld\n",
+               ppkt->size, ppkt->pts);
+    }
+rtsp_read_frame_error:
     av_log(NULL, AV_LOG_INFO, "Thread ends\n");
-    ffurl_close(param->clientctx);
+    avformat_close_input(&param->clientctx);
     pthread_exit(0);
     return NULL;
+}
+
+static int create_rtsp_publish_thread(AVFormatContext *s)
+{
+    AVInputFormat *iformat;
+    pthread_t avservth;
+    pthread_attr_t avservth_attr;
+    struct avserv_thread_params *avservth_params = { 0 };
+    avservth_params = av_malloc(sizeof(struct avserv_thread_params));
+    if (!avservth_params) {
+        av_log(NULL, AV_LOG_ERROR, "Unable to allocate thread params "
+               "memory\n");
+        return AVERROR(ENOMEM);
+    }
+    avservth_params->clientctx = s;
+    iformat = av_find_input_format("rtsp");
+    if (!av_dict_get(format_opts, "rtsp_flags", NULL, 0))
+        av_dict_set(&format_opts, "rtsp_flags", "listen", 0);
+    avformat_open_input(&s, "rtsp://localhost:5554/prueba?accept",
+                        iformat, &format_opts);
+    if (pthread_attr_init(&avservth_attr))
+        av_log(NULL, AV_LOG_ERROR, "Unable to init"
+               " thread attributes\n");
+    if (pthread_create(&avservth , &avservth_attr,
+                       rtsp_publish_avserv_thread, avservth_params))
+        av_log(NULL, AV_LOG_ERROR, "Unable to create listen thread\n");
+    pthread_detach(avservth); /* Detach thread */
+    return 0;
 }
 
 int main(int argc, char *argv[])
 {
     int ret;
     char tcpname[500];
-    AVFormatContext fmtctx = { 0};
+    AVFormatContext rtsp_publish_fmtctx = { 0 };
 
     // TODO: ADD pthread_t monitor -- Is it really needed?
     /* Argument parsing */
@@ -118,54 +160,48 @@ int main(int argc, char *argv[])
     av_log(NULL, AV_LOG_INFO, "Server starts...\n");
 
     num_clients = 0;
-    /* if (!fmtctx) { */
-    /*     av_log(NULL, AV_LOG_ERROR, "Error initializing AVFormatContext\n"); */
-    /*     return AVERROR(ENOMEM); */
-    /* } */
-    /* fmtctx->oformat = av_guess_format("tcp", NULL, NULL); */
+    clients = NULL;
+    avfilter_register_all();
     av_register_all();
     avformat_network_init();
 
+    /* RTSP Publish */
     ff_url_join(tcpname, sizeof(tcpname), "tcp", NULL, "localhost",
-                RTMP_DEFAULT_PORT, "?accept");
+                5554, "?accept");
     av_log(NULL, AV_LOG_INFO, "Opening: %s\n", tcpname);
-    if (avio_open(&fmtctx.pb, tcpname, AVIO_FLAG_READ_WRITE)) {
+    if (avio_open(&rtsp_publish_fmtctx.pb, tcpname, AVIO_FLAG_READ_WRITE)) {
         av_log(NULL, AV_LOG_ERROR, "Unable to open TCP\n");
         return AVERROR(EIO);
     }
-    if (avio_listen(&fmtctx.pb, tcpname, AVIO_FLAG_READ_WRITE, -1)) {
+    if (avio_listen(&rtsp_publish_fmtctx.pb, tcpname, AVIO_FLAG_READ_WRITE, -1)) {
         av_log(NULL, AV_LOG_ERROR, "Unable to open TCP for listening\n");
         return AVERROR(EIO);
     }
 
-    for (;;) {
-        AVFormatContext client = { 0 };
-        pthread_t avservth;
-        pthread_attr_t avservth_attr;
-        struct avserv_thread_params *avservth_params = { 0 };
-        avservth_params = av_malloc(sizeof(struct avserv_thread_params));
-        if (!avservth_params) {
-            av_log(NULL, AV_LOG_ERROR, "Unable to allocate thread params "
-                   "memory\n");
-        }
+    /* RTSP Server */
 
-        av_log(NULL, AV_LOG_INFO, "Accept\n");
-        if (ret = avio_accept(fmtctx.pb, &client.pb)) {
+
+    for (;;) {
+        AVIOContext *avioc = NULL;
+        //av_log(NULL, AV_LOG_INFO, "Waiting RTSP publish Accept\n");
+        if (ret = avio_accept(rtsp_publish_fmtctx.pb, &avioc, ACCEPT_TOUT)) {
             av_log(NULL, AV_LOG_ERROR, "Error in avio_accept\n");
             return ret;
         }
-        avservth_params->clientctx = client.pb->opaque;
-        num_clients++;
-        clients = av_realloc(clients, sizeof(struct client_context)
-                             * num_clients);
-
-        if (pthread_attr_init(&avservth_attr))
-            av_log(NULL, AV_LOG_ERROR, "Unable to init"
-                   " thread attributes\n");
-        if (pthread_create(&avservth , &avservth_attr, avserv_thread,
-                          avservth_params))
-            av_log(NULL, AV_LOG_ERROR, "Unable to create listen thread\n");
-        pthread_detach(avservth); /* Detach thread */
+        if (avioc) {
+            AVFormatContext *client;
+            av_log(NULL, AV_LOG_INFO, "New connection received\n");
+            num_clients++;
+            client = avformat_alloc_context();
+            client->pb = avioc;
+            //TODO: clients = av_realloc(clients, sizeof(struct client_context)
+            //                     * num_clients);
+            if (!create_rtsp_publish_thread(client)) {
+                av_log(NULL, AV_LOG_ERROR,
+                       "Unable to create rtsp publish thread\n");
+            }
+        }
+        //avservth_params->clientctx = client;
     }
     return 0;
 }
