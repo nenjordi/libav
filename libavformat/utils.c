@@ -480,8 +480,8 @@ static int init_input(AVFormatContext *s, const char *filename, AVDictionary **o
         s->flags |= AVFMT_FLAG_CUSTOM_IO;
         if (!s->iformat)
             return av_probe_input_buffer(s->pb, &s->iformat, filename, s, 0, s->probesize);
-        else if (s->iformat->flags & AVFMT_NOFILE)
-            return AVERROR(EINVAL);
+        /*WARNING! else if (s->iformat->flags & AVFMT_NOFILE) */
+        /*WARNING!     return AVERROR(EINVAL); */
         return 0;
     }
 
