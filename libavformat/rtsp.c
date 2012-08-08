@@ -1713,13 +1713,17 @@ static int udp_read_packet(AVFormatContext *s, RTSPStream **prtsp_st,
         for (i = 0; i < rt->nb_rtsp_streams; i++) {
             rtsp_st = rt->rtsp_streams[i];
             if (rtsp_st->rtp_handle) {
-                p[max_p].fd = ffurl_get_file_handle(rtsp_st->rtp_handle);
-                p[max_p++].events = POLLIN;
                 if (ret = ffurl_get_multi_file_handle(rtsp_st->rtp_handle, fds,
                                                       &fdsnum)) {
                     av_log(s, AV_LOG_ERROR, "Unable to recover rtp ports\n");
                     return ret;
                 }
+                if (fdsnum < 2) {
+                    av_log(s, AV_LOG_ERROR, "RTP or RTCP socket missing\n");
+                    return AVERROR_INVALIDDATA;
+                }
+                p[max_p].fd = fds[0];
+                p[max_p++].events = POLLIN;
                 p[max_p].fd = fds[1];
                 av_free(fds);
                 p[max_p++].events = POLLIN;
