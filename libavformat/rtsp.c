@@ -1695,6 +1695,7 @@ static int udp_read_packet(AVFormatContext *s, RTSPStream **prtsp_st,
     int n, i, ret, tcp_fd, timeout_cnt = 0;
     int max_p = 0;
     struct pollfd *p = rt->p;
+    int *fds, fdsnum;
 
     for (;;) {
         if (ff_check_interrupt(&s->interrupt_callback))
@@ -1714,7 +1715,13 @@ static int udp_read_packet(AVFormatContext *s, RTSPStream **prtsp_st,
             if (rtsp_st->rtp_handle) {
                 p[max_p].fd = ffurl_get_file_handle(rtsp_st->rtp_handle);
                 p[max_p++].events = POLLIN;
-                p[max_p].fd = ff_rtp_get_rtcp_file_handle(rtsp_st->rtp_handle);
+                if (ret = ffurl_get_multi_file_handle(rtsp_st->rtp_handle, fds,
+                                                      &fdsnum)) {
+                    av_log(s, AV_LOG_ERROR, "Unable to recover rtp ports\n");
+                    return ret;
+                }
+                p[max_p].fd = fds[1];
+                av_free(fds);
                 p[max_p++].events = POLLIN;
             }
         }
