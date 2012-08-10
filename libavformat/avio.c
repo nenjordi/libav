@@ -344,6 +344,13 @@ int ffurl_get_file_handle(URLContext *h)
     return h->prot->url_get_file_handle(h);
 }
 
+int ffurl_get_multi_file_handle(URLContext *h, int *handles, int *numhandles)
+{
+    if (!h->prot->url_get_multi_file_handle(h, handles, numhandles))
+        return AVERROR_OPTION_NOT_FOUND;
+    return 0;
+}
+
 int ffurl_shutdown(URLContext *h, int flags)
 {
     if (!h->prot->url_shutdown)
