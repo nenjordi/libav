@@ -448,15 +448,33 @@ static int sctp_get_file_handle(URLContext *h)
     return s->fd;
 }
 
+static int sctp_get_multi_file_handle(URLContext *h, int *handles,
+                                      int *numhandles)
+{
+    SCTPContext *s = h->priv_data;
+    int i;
+    if (!s->nb_serversocks)
+        return AVERROR_INVALIDDATA;
+    handles = av_malloc(sizeof(int) * s->nb_serversocks);
+    if (!handles)
+        return AVERROR(ENOMEM);
+    for (i = 0; i < s->nb_serversocks; i++)
+        handles[i] = s->serversocks[i];
+    *numhandles = s->nb_serversocks;
+    return 0;
+}
+
+
 URLProtocol ff_sctp_protocol = {
-    .name                = "sctp",
-    .url_open            = sctp_open,
-    .url_listen          = sctp_listen,
-    .url_accept          = sctp_accept,
-    .url_read            = sctp_read,
-    .url_write           = sctp_write,
-    .url_close           = sctp_close,
-    .url_get_file_handle = sctp_get_file_handle,
-    .priv_data_size      = sizeof(SCTPContext),
-    .flags               = URL_PROTOCOL_FLAG_NETWORK,
+    .name                      = "sctp",
+    .url_open                  = sctp_open,
+    .url_listen                = sctp_listen,
+    .url_accept                = sctp_accept,
+    .url_read                  = sctp_read,
+    .url_write                 = sctp_write,
+    .url_close                 = sctp_close,
+    .url_get_file_handle       = sctp_get_file_handle,
+    .url_get_multi_file_handle = sctp_get_multi_file_handle,
+    .priv_data_size            = sizeof(SCTPContext),
+    .flags                     = URL_PROTOCOL_FLAG_NETWORK,
 };
