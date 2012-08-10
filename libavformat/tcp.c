@@ -456,16 +456,33 @@ static int tcp_get_file_handle(URLContext *h)
     return s->fd;
 }
 
+static int tcp_get_multi_file_handle(URLContext *h, int *handles,
+                                     int *numhandles)
+{
+    TCPContext *s = h->priv_data;
+    int i;
+    if (!s->nb_serversocks)
+        return AVERROR_INVALIDDATA;
+    handles = av_malloc(sizeof(int) * s->nb_serversocks);
+    if (!handles)
+        return AVERROR(ENOMEM);
+    for (i = 0; i < s->nb_serversocks; i++)
+        handles[i] = s->serversocks[i];
+    *numhandles = s->nb_serversocks;
+    return 0;
+}
+
 URLProtocol ff_tcp_protocol = {
-    .name                = "tcp",
-    .url_open            = tcp_open,
-    .url_read            = tcp_read,
-    .url_write           = tcp_write,
-    .url_close           = tcp_close,
-    .url_get_file_handle = tcp_get_file_handle,
-    .url_shutdown        = tcp_shutdown,
-    .url_accept          = tcp_accept,
-    .url_listen          = tcp_listen,
-    .priv_data_size      = sizeof(TCPContext),
-    .flags               = URL_PROTOCOL_FLAG_NETWORK,
+    .name                      = "tcp",
+    .url_open                  = tcp_open,
+    .url_read                  = tcp_read,
+    .url_write                 = tcp_write,
+    .url_close                 = tcp_close,
+    .url_get_file_handle       = tcp_get_file_handle,
+    .url_get_multi_file_handle = tcp_get_multi_file_handle,
+    .url_shutdown              = tcp_shutdown,
+    .url_accept                = tcp_accept,
+    .url_listen                = tcp_listen,
+    .priv_data_size            = sizeof(TCPContext),
+    .flags                     = URL_PROTOCOL_FLAG_NETWORK,
 };
