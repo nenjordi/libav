@@ -219,8 +219,7 @@ int main(int argc, char *argv[])
         av_log(NULL, AV_LOG_ERROR, "Unable to open TCP\n");
         return AVERROR(EIO);
     }
-    if (avio_listen(&rtsp_publish_fmtctx.pb, tcpname, AVIO_FLAG_READ_WRITE,
-                    -1)) {
+    if (avio_listen(rtsp_publish_fmtctx.pb, tcpname, AVIO_FLAG_READ_WRITE)) {
         av_log(NULL, AV_LOG_ERROR, "Unable to open TCP for listening\n");
         return AVERROR(EIO);
     }
@@ -235,8 +234,7 @@ int main(int argc, char *argv[])
         av_log(NULL, AV_LOG_ERROR, "Unable to open TCP\n");
         return AVERROR(EIO);
     }
-    if (avio_listen(&rtsp_server_fmtctx.pb, tcpname, AVIO_FLAG_READ_WRITE,
-                    -1)) {
+    if (avio_listen(rtsp_server_fmtctx.pb, tcpname, AVIO_FLAG_READ_WRITE)) {
         av_log(NULL, AV_LOG_ERROR, "Unable to open TCP for listening\n");
         return AVERROR(EIO);
     }
