@@ -659,6 +659,8 @@ int ffio_fdopen(AVIOContext **s, URLContext *h)
     if(h->prot) {
         (*s)->read_pause = (int (*)(void *, int))h->prot->url_read_pause;
         (*s)->read_seek  = (int64_t (*)(void *, int, int64_t, int))h->prot->url_read_seek;
+        (*s)->listen_connection = (int (*)(void *, const char *, int))h->prot->url_listen;
+        (*s)->accept_connection = (int (*)(void *, void **, int))h->prot->url_accept;
     }
     (*s)->av_class = &ffio_url_class;
     return 0;
@@ -756,22 +758,15 @@ int avio_open2(AVIOContext **s, const char *filename, int flags,
 
 int avio_listen(AVIOContext *s, const char *url, int flags)
 {
-    URLContext *ctx = s->opaque;
     int ret;
 
-    if (!ctx) {
+    if (!s->listen_connection) {
         av_log(s, AV_LOG_ERROR, "avio_listen. No allocated context\n");
-        return AVERROR_BUG;
+        return AVERROR(ENOSYS);
     }
 
-    if (!ctx->prot->url_listen) {
-        av_log(s, AV_LOG_ERROR, "Protocol %s does not support listen\n",
-               ctx->prot->name);
-        return AVERROR_BUG;
-    }
-
-    if (ret = ctx->prot->url_listen(ctx, url, flags)) {
-        av_log(s, AV_LOG_ERROR, "Error on Accept\n");
+    if (ret = s->listen_connection(s->opaque, url, flags)) {
+        av_log(s, AV_LOG_ERROR, "Unable to listen\n");
         return ret;
     }
 
@@ -780,20 +775,14 @@ int avio_listen(AVIOContext *s, const char *url, int flags)
 
 int avio_accept(AVIOContext *server, AVIOContext **client, int timeout)
 {
-    URLContext *serverctx = server->opaque;
     URLContext *clientctx = NULL;
     int ret;
-    if (!serverctx) {
-        av_log(server, AV_LOG_ERROR, "avio_accept. No allocated context\n");
-        return AVERROR_BUG;
+    if (!server->accept_connection) {
+        av_log(server, AV_LOG_ERROR, "Protocol does not support accept\n");
+        return AVERROR(ENOSYS);
     }
-    if (!serverctx->prot->url_accept) {
-        av_log(server, AV_LOG_ERROR, "Protocol %s does not support accept\n",
-               serverctx->prot->name);
-        return AVERROR_BUG;
-    }
-    if (ret = serverctx->prot->url_accept(serverctx, &clientctx, timeout)) {
-        av_log(server, AV_LOG_ERROR, "Error on Accept\n");
+    if (ret = server->accept_connection(server->opaque, &clientctx, timeout)) {
+        av_log(server, AV_LOG_ERROR, "Unable to accept connection\n");
         return ret;
     }
     if (!clientctx) // url_accept timed out

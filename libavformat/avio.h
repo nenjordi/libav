@@ -90,6 +90,8 @@ typedef struct {
                                  functions. */
     int (*read_packet)(void *opaque, uint8_t *buf, int buf_size);
     int (*write_packet)(void *opaque, uint8_t *buf, int buf_size);
+    int (*listen_connection)(void *opaque, const char *url, int flags);
+    int (*accept_connection)(void *opaque, void **opaqueclient, int timeout);
     int64_t (*seek)(void *opaque, int64_t offset, int whence);
     int64_t pos;            /**< position in the file of the current buffer */
     int must_flush;         /**< true if the next seek should flush */
