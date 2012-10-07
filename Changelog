@@ -14,6 +14,7 @@ version 9_beta3:
 - multi-channel ALAC encoding up to 7.1
 - TAK demuxer, parser, and decoder
 - adaptive frame-level multithreading for H.264
+- Native dirac decoder
 
 
 version 9_beta2:
