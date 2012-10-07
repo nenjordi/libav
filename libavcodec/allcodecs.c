@@ -95,6 +95,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (CSCD, cscd);
     REGISTER_DECODER (CYUV, cyuv);
     REGISTER_DECODER (DFA, dfa);
+    REGISTER_DECODER (DIRAC, dirac);
     REGISTER_ENCDEC  (DNXHD, dnxhd);
     REGISTER_ENCDEC  (DPX, dpx);
     REGISTER_DECODER (DSICINVIDEO, dsicinvideo);
