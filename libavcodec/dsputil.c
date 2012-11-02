@@ -2912,6 +2912,14 @@ av_cold void ff_dsputil_init(DSPContext* c, AVCodecContext *avctx)
     c->add_pixels4                   = FUNCC(add_pixels4  ## dct   , depth);\
     c->put_no_rnd_pixels_l2[0]       = FUNCC(put_no_rnd_pixels16_l2, depth);\
     c->put_no_rnd_pixels_l2[1]       = FUNCC(put_no_rnd_pixels8_l2 , depth);\
+    c->put_pixels_l2[0]              = put_pixels16_l2_8;               \
+    c->put_pixels_l2[1]              = put_pixels8_l2_8;                \
+    c->put_pixels_l4[0]              = put_pixels16_l4_8;               \
+    c->put_pixels_l4[1]              = put_pixels8_l4_8;                \
+    c->avg_pixels_l2[0]              = avg_pixels16_l2_8;               \
+    c->avg_pixels_l2[1]              = avg_pixels8_l2_8;                \
+    c->avg_pixels_l4[0]              = avg_pixels16_l4_8;               \
+    c->avg_pixels_l4[1]              = avg_pixels8_l4_8;                \
 \
     c->put_h264_chroma_pixels_tab[0] = FUNCC(put_h264_chroma_mc8   , depth);\
     c->put_h264_chroma_pixels_tab[1] = FUNCC(put_h264_chroma_mc4   , depth);\
