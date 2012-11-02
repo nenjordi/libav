@@ -293,6 +293,33 @@ typedef struct DSPContext {
 
     void (*put_no_rnd_pixels_l2)(uint8_t *block/*align 8*/, const uint8_t *a/*align 1*/, const uint8_t *b/*align 1*/, int line_size, int h);
 
+    void (*put_pixels_l2[2])(uint8_t *block /* align width (8 or 16) */,
+                             const uint8_t *a /* align 1 */,
+                             const uint8_t *b /* align 1 */,
+                             int line_size1, int line_size2,
+                             int line_size3, int h);
+    void (*avg_pixels_l2[2])(uint8_t *block /* align width (8 or 16) */,
+                             const uint8_t *a /* align 1 */,
+                             const uint8_t *b /* align 1 */,
+                             int line_size1, int line_size2,
+                             int line_size3, int h);
+    void (*put_pixels_l4[2])(uint8_t *block /* align width (8 or 16) */,
+                             const uint8_t *a /* align 1 */,
+                             const uint8_t *b /* align 1 */,
+                             const uint8_t *c /* align 1 */,
+                             const uint8_t *d /* align 1 */,
+                             int line_size1, int line_size2,
+                             int line_size3, int line_size4,
+                             int line_size5, int h);
+    void (*avg_pixels_l4[2])(uint8_t *block /* align width (8 or 16) */,
+                             const uint8_t *a /* align 1 */,
+                             const uint8_t *b /* align 1 */,
+                             const uint8_t *c /* align 1 */,
+                             const uint8_t *d /* align 1 */,
+                             int line_size1, int line_size2,
+                             int line_size3, int line_size4,
+                             int line_size5, int h);
+
     /**
      * Thirdpel motion compensation with rounding (a+b+1)>>1.
      * this is an array[12] of motion compensation functions for the 9 thirdpe
