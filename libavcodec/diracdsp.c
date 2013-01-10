@@ -285,6 +285,8 @@ static void add_rect_clamped_c(uint8_t *dst, const uint16_t *src, int stride,
 void ff_diracdsp_init(DiracDSPContext *c, AVCodecContext *avctx)
 {
     ff_dsputil_init(&c->dsp, avctx);
+    // checkme: bitdepth set to 8 but could bitdepth be variable?
+    ff_videodsp_init(&c->videodsp, 8);
 
     c->dirac_hpel_filter       = dirac_hpel_filter;
     c->add_rect_clamped        = add_rect_clamped_c;

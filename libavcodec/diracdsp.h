@@ -24,6 +24,7 @@
 #include <stdint.h>
 
 #include "dsputil.h"
+#include "videodsp.h"
 
 typedef void (*dirac_weight_func)(uint8_t *block, int stride, int log2_denom,
                                   int weight, int h);
@@ -68,6 +69,7 @@ typedef struct DiracDSPContext {
     dirac_weight_func weight_dirac_pixels_tab[3];
     dirac_biweight_func biweight_dirac_pixels_tab[3];
     DSPContext dsp;
+    VideoDSPContext videodsp;
 } DiracDSPContext;
 
 #define DECL_DIRAC_PIXOP(PFX, EXT)                                     \
