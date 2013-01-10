@@ -61,9 +61,6 @@
  * is held for delayed output. */
 #define DELAYED_PIC_REF 4
 
-#define ff_emulated_edge_mc ff_emulated_edge_mc_8
-/* Fix: change the calls to this function regarding bit depth */
-
 #define CALC_PADDING(size, depth)                       \
     ((((size) + (1 << (depth)) - 1) >> (depth)) << (depth))
 
@@ -1424,10 +1421,11 @@ static int mc_subpel(DiracContext *s, DiracBlock *block, const uint8_t *src[5],
     if ((unsigned)x > p->width  + EDGE_WIDTH / 2 - p->xblen ||
         (unsigned)y > p->height + EDGE_WIDTH / 2 - p->yblen) {
         for (i = 0; i < nplanes; i++) {
-            ff_emulated_edge_mc(s->edge_emu_buffer[i], src[i], p->stride,
-                                p->xblen, p->yblen, x, y,
-                                p->width  + EDGE_WIDTH / 2,
-                                p->height + EDGE_WIDTH / 2);
+            s->diracdsp.videodsp.emulated_edge_mc(s->edge_emu_buffer[i],
+                                                   src[i], p->stride,
+                                                   p->xblen, p->yblen, x, y,
+                                                   p->width  + EDGE_WIDTH / 2,
+                                                   p->height + EDGE_WIDTH / 2);
             src[i] = s->edge_emu_buffer[i];
         }
     }
