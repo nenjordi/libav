@@ -29,7 +29,6 @@
 #define AVCODEC_DIRAC_ARITH_H
 
 #include "bytestream.h"
-#include "get_bits.h"
 
 enum dirac_arith_contexts {
     CTX_ZPZN_F1,

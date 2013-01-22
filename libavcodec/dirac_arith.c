@@ -25,6 +25,7 @@
  * @author Marco Gerards <marco@gnu.org>
  */
 
+#include "get_bits.h"
 #include "dirac_arith.h"
 
 const uint16_t ff_dirac_prob[256] = {

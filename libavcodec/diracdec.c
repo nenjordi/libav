@@ -868,7 +868,7 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
         return AVERROR_INVALIDDATA;
     }
     if (FFMAX(s->plane[0].xblen, s->plane[0].yblen) > DIRAC_MAX_BLOCKSIZE) {
-        av_log(s->avctx, AV_LOG_ERROR, "Unsupported large block size\n");
+        av_log_missing_feature(s->avctx, "Unsupported large block size\n", 1);
         return AVERROR_PATCHWELCOME;
     }
 
@@ -1687,9 +1687,8 @@ static int dirac_decode_picture_header(DiracContext *s)
     GetBitContext *gb = &s->gb;
 
     /* [DIRAC_STD] 11.1.1 Picture Header. picture_header() PICTURE_NUM */
-    picnum =
-    s->current_picture->avframe.display_picture_number =
-        get_bits_long(gb, 32);
+    picnum                                             =
+    s->current_picture->avframe.display_picture_number = get_bits_long(gb, 32);
 
     /* if this is the first keyframe after a sequence header, start our
      * reordering from here */
@@ -1719,10 +1718,10 @@ static int dirac_decode_picture_header(DiracContext *s)
             for (j = 0; j < DIRAC_MAX_FRAMES; j++)
                 if (!s->all_frames[j].avframe.data[0]) {
                     s->ref_pics[i] = &s->all_frames[j];
-                    if (ff_get_buffer(s->avctx, &s->ref_pics[i]->avframe) < 0) {
+                    if (ret = ff_get_buffer(s->avctx, &s->ref_pics[i]->avframe) < 0) {
                         av_log(s->avctx, AV_LOG_ERROR,
                                "Unable to allocate new frame\n");
-                        return AVERROR_BUG;
+                        return ret;
                     }
                 }
     }
@@ -1876,9 +1875,9 @@ static int dirac_decode_data_unit(AVCodecContext *avctx, const uint8_t *buf,
         /* Definition of AVPictureType in avutil.h */
         pic->avframe.pict_type = s->num_refs + 1;
 
-        if (ff_get_buffer(avctx, &pic->avframe) < 0) {
+        if (ret = ff_get_buffer(avctx, &pic->avframe) < 0) {
             av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
-            return AVERROR_BUG;
+            return ret;
         }
         s->current_picture = pic;
         s->plane[0].stride = pic->avframe.linesize[0];
@@ -1907,8 +1906,8 @@ static int dirac_decode_frame(AVCodecContext *avctx, void *data,
 
     /* release unused frames */
     for (i = 0; i < DIRAC_MAX_FRAMES; i++)
-        if (s->all_frames[i].avframe.data[0]
-            && !s->all_frames[i].avframe.reference) {
+        if (s->all_frames[i].avframe.data[0] &&
+            !s->all_frames[i].avframe.reference) {
             avctx->release_buffer(avctx, &s->all_frames[i].avframe);
             memset(s->all_frames[i].interpolated, 0,
                    sizeof(s->all_frames[i].interpolated));
