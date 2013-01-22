@@ -391,6 +391,7 @@ static av_cold int dirac_decode_init(AVCodecContext *avctx)
 {
     DiracContext *s = avctx->priv_data;
     s->avctx        = avctx;
+    s->avctx->bits_per_raw_sample = 8;
     s->frame_number = -1;
 
     if (avctx->flags & CODEC_FLAG_EMU_EDGE) {
