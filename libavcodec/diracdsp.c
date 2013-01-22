@@ -286,19 +286,19 @@ void ff_diracdsp_init(DiracDSPContext *c, AVCodecContext *avctx)
 {
     ff_dsputil_init(&c->dsp, avctx);
     // checkme: bitdepth set to 8 but could bitdepth be variable?
-    ff_videodsp_init(&c->videodsp, 8);
+    ff_videodsp_init(&c->videodsp, avctx->bits_per_raw_sample);
 
-    c->dirac_hpel_filter       = dirac_hpel_filter;
-    c->add_rect_clamped        = add_rect_clamped_c;
-    c->put_signed_rect_clamped = put_signed_rect_clamped_c;
+    c->dirac_hpel_filter            = dirac_hpel_filter;
+    c->add_rect_clamped             = add_rect_clamped_c;
+    c->put_signed_rect_clamped      = put_signed_rect_clamped_c;
 
-    c->add_dirac_obmc[0] = add_obmc8_c;
-    c->add_dirac_obmc[1] = add_obmc16_c;
-    c->add_dirac_obmc[2] = add_obmc32_c;
+    c->add_dirac_obmc[0]            = add_obmc8_c;
+    c->add_dirac_obmc[1]            = add_obmc16_c;
+    c->add_dirac_obmc[2]            = add_obmc32_c;
 
-    c->weight_dirac_pixels_tab[0] = weight_dirac_pixels8_c;
-    c->weight_dirac_pixels_tab[1] = weight_dirac_pixels16_c;
-    c->weight_dirac_pixels_tab[2] = weight_dirac_pixels32_c;
+    c->weight_dirac_pixels_tab[0]   = weight_dirac_pixels8_c;
+    c->weight_dirac_pixels_tab[1]   = weight_dirac_pixels16_c;
+    c->weight_dirac_pixels_tab[2]   = weight_dirac_pixels32_c;
 
     c->biweight_dirac_pixels_tab[0] = biweight_dirac_pixels8_c;
     c->biweight_dirac_pixels_tab[1] = biweight_dirac_pixels16_c;

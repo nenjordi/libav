@@ -415,18 +415,18 @@ static void spatial_compose_daub97i_dy(DiracDWTContext *d, int level,
     b[4] = d->buffer + mirror(y + 3, height - 1) * stride;
     b[5] = d->buffer + mirror(y + 4, height - 1) * stride;
 
-    if (y + 3 < (unsigned)height)
+    if (y + 3 < height)
         d->vertical_compose_l1(b[3], b[4], b[5], width);
-    if (y + 2 < (unsigned)height)
+    if (y + 2 < height)
         d->vertical_compose_h1(b[2], b[3], b[4], width);
-    if (y + 1 < (unsigned)height)
+    if (y + 1 < height)
         d->vertical_compose_l0_3tap(b[1], b[2], b[3], width);
-    if (y + 0 < (unsigned)height)
+    if (y + 0 < height)
         d->vertical_compose_h0_3tap(b[0], b[1], b[2], width);
 
-    if (y - 1 < (unsigned)height)
+    if (y - 1 < height)
         d->horizontal_compose(b[0], d->temp, width);
-    if (y + 0 < (unsigned)height)
+    if (y + 0 < height)
         d->horizontal_compose(b[1], d->temp, width);
 
     for (i = 0; i < 4; i++)

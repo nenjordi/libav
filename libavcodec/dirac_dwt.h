@@ -24,8 +24,8 @@
 
 #include <stdint.h>
 
-typedef int   DWTELEM;
-typedef short IDWTELEM;
+typedef int32_t DWTELEM;
+typedef int16_t  IDWTELEM;
 
 #define MAX_DWT_SUPPORT    8
 #define MAX_DECOMPOSITIONS 8
